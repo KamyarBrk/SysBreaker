@@ -52,7 +52,7 @@ embeddings = OllamaEmbeddings(
     model="nomic-embed-text"    # use the ollama run nomic-embed-text the first time you run this code
 )
 
-pdf_path = r"/home/kali/PycharmProjects/new/CYSE492-Group-22/Training_documents/enum_training/telnet-cheat-sheet.pdf"
+pdf_path = r"Training_documents/enum_training/telnet-cheat-sheet.pdf"
 
 # Ensure the PDF file exists
 if not os.path.exists(pdf_path):
