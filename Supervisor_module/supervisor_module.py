@@ -134,7 +134,7 @@ def select_model_func():
     
     while True:
         # Display menu of available models
-        print("\nSelect a model for exploitation phase:")
+        print("\nSelect a model for Supervisor phase:")
         print("1: llama3.2:latest (less powerful)\n2: gpt-oss:20b (more powerful)\n3: gpt-oss:20b-cloud (more powerful)\n4: gpt-oss:120b-cloud (most powerful, largest)")
         print('')
         try:
