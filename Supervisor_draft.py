@@ -9,7 +9,7 @@ from typing import TypedDict, List, Iterable, Annotated, Sequence
 
 # Importing message classes from LangChain’s message system.
 # These represent structured messages exchanged between human, AI, and tools.
-from langchain_core.messages import BaseMessage, ToolMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.messages import HumanMessage, AIMessage
 
 # The @tool decorator marks a Python function as an LLM tool (executable command).
@@ -21,11 +21,8 @@ from langchain_ollama import ChatOllama
 # add_messages is a LangGraph helper function that merges and propagates messages in graph states.
 from langgraph.graph.message import add_messages
 
-# ToolNode is a predefined LangGraph node type that automatically handles tool execution.
-from langgraph.prebuilt import ToolNode
-
 # Import LangGraph’s core graph components for constructing conversational state graphs.
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 
 # subprocess is used to run system commands and capture their outputs.
 import subprocess
@@ -33,21 +30,23 @@ import subprocess
 # json for serializing/deserializing the conversation memory to disk.
 import json
 
-from langchain_chroma import Chroma
-
 # Path from pathlib provides filesystem-safe handling for file paths.
 from pathlib import Path
+from IPython.display import display,Image
+from typing_extensions import NotRequired, Literal
+from Enumeration_module.Enumeration import enum_call
+from Recon_module.Recon import recon_call
+from Post_Exploitation_module.post_exploitation import post_exp_call
+from Exploitation_module.Exploitation import exp_call
+from pydantic import BaseModel
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from IPython.display import display, Markdown,Image
-from langchain_ollama.embeddings import OllamaEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-import os
 
 # --- Simple file-backed conversation memory settings ---
 MEMORY_FILE = Path("supervisor_memory.json")  # Path to the file used to persist chat memory
 MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
+selected_model_supervisor = None  # Global variable to hold the user-selected Ollama model for the supervisor agent
 
 # Helper function to determine message "role" string
 def _msg_role(m: BaseMessage) -> str:
@@ -174,8 +173,46 @@ def select_model_func():
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]  # Annotated list of BaseMessages tracked by LangGraph
 
+    next:NotRequired[str]  # Added field to track the next agent/role to invoke based on supervisor's decision
 
 
+graph = StateGraph(AgentState)  # Initialize graph with defined state type
+
+# ---------------------------------------------------------------------
+# Creating the supervisor module
+# ---------------------------------------------------------------------
+
+agents = ["Recon_agent","Enumeration_agent", "Exploitation_agent", "Post_Exploitation_agent"]
+
+options = ["Objectives_met"] + agents
+
+class RouteOut(BaseModel):
+    next: Literal["Objectives_met", "Recon_agent","Enumeration_agent","Exploitation_agent","Post_Exploitation_agent"]
+
+
+'''
+route_tool = {
+  "type": "function",
+  "function": {
+    "name": "route",
+    "description": "Select the next role.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "next": {
+          "type": "string",
+          "description": "Next role",
+          "enum": options,        
+        }
+      },
+      "required": ["next"],
+      "additionalProperties": False,
+    },
+  },
+}
+
+tools = [route_tool]
+'''
 
 def supervisor_call(state: AgentState) -> AgentState:
     """
@@ -195,71 +232,78 @@ def supervisor_call(state: AgentState) -> AgentState:
             incoming.append(HumanMessage(content=str(m)))  # Coerce non-message input into HumanMessage
 
     # Define the system-level prompt for this LLM call
-    system_prompt = SystemMessage(
-        content="You are the supervisor of AI agents responsible for overseeing their tasks. "
-    )
+    
+    system_text =f"You are the supervisor of AI agents responsible for overseeing their tasks to complete a penetration test."\
+        f"managing a conversation between the following workers: {agents}. Given the following user request, respond with the worker to act next.\
+      Each worker will perform a task and respond with their results and status. When finished, respond with Objectives_met."
+    
 
     # Compose full input prompt: system message + memory + current input
-    full_prompt = [system_prompt] + mem_msgs + incoming
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_text),
+        MessagesPlaceholder(variable_name="messages"),
+        ("system", f"Pick exactly one: {', '.join(options)}")
+    ])
+
+
+    llm = ChatOllama(model=selected_model_supervisor)
+    supervisor_chain = prompt | llm.with_structured_output(RouteOut)
+
+    routed: RouteOut = supervisor_chain.invoke({"messages": mem_msgs + incoming})
+    next_role = routed.next
+
+    ai_msg = AIMessage(content=f"ROUTE={next_role}")
+    save_memory(mem_msgs + incoming + [ai_msg])
+
+    return {"messages": [ai_msg], "next": next_role}
+    
+    #response = supervisor_chain.invoke({"messages": incoming})
+
+    #next_role = response["args"]["next"]
+    #full_prompt = [system_prompt] + mem_msgs + incoming
 
     # Invoke LLM with full prompt
-    response = llm.invoke(full_prompt)
+    #response = llm.invoke(full_prompt)
 
     # Update stored memory with new interaction (adds human + AI messages)
-    updated_memory = mem_msgs + incoming + [response]
-    save_memory(updated_memory)  # Persist updated memory to disk
+    #updated_memory = mem_msgs + incoming + [response]
+    #save_memory(updated_memory)  # Persist updated memory to disk
 
     # Return new graph state containing only the model's response
-    return {"messages": [response]}
+    #return {"messages": [response], "next": next_role}
 
-# ---------------------------------------------------------------------
-# Define control logic to determine graph continuation
-# ---------------------------------------------------------------------
-def should_continue(state: AgentState):
-    """
-    Determines whether the graph should continue (invoke a tool) 
-    or stop (end conversation).
-    """
-    messages = state["messages"]  # Extract message list from current state
-    last_message = messages[-1]  # Get the last message in the sequence
-    # Check if model returned any tool calls
-    if not getattr(last_message, "tool_calls", None):
-        return "end"  # No tool call: finish execution
-    else:
-        return "continue"  # Tool call found: continue to tool node
 
 # ---------------------------------------------------------------------
 # Create and connect the LangGraph execution graph
 # ---------------------------------------------------------------------
-graph = StateGraph(AgentState)  # Initialize graph with defined state type
-graph.add_node("super_agent", supervisor_call)  # Add exploitation node (LLM interaction)
 
-#tool_node = ToolNode(tools=tools)  # Node that executes tool calls
-#graph.add_node("tools", tool_node)  # Add the tool node to the graph
-#graph.add_node("retriever_agent", tool_node)
+agentic_flow = StateGraph(AgentState)
+agentic_flow.add_node("supervisor",supervisor_call)
+agentic_flow.add_node("Recon_agent",recon_call)
+agentic_flow.add_node("Enumeration_agent",enum_call)
+agentic_flow.add_node("Exploitation_agent",exp_call)
+agentic_flow.add_node("Post_Exploitation_agent",post_exp_call)
 
-# Define conditional flow between nodes based on should_continue()
-graph.add_conditional_edges(
-    "super_agent",
-    should_continue,
-    {
-        "continue": "retriever_agent",  # If tool call exists, go to tools node
-        "end": END,  # If not, stop execution
-    },
-)
+# Events: Worker -> Supervisor
+for agent in agents:
+    agentic_flow.add_edge(agent, "supervisor")
 
-#graph.add_edge("retriever_agent", "exp_agent")  # After running a tool, go back to LLM node
 
-graph.set_entry_point("super_agent")
+# Events: Supervisor -> Worker (Conditional)
+conditional_map = {j: j for j in agents}
+conditional_map["Objectives_met"] = END
+agentic_flow .add_conditional_edges("supervisor", lambda x: x["next"], conditional_map)
 
-exp = graph.compile()  # Compile graph into runnable pipeline
+agentic_flow.set_entry_point("supervisor")
 
+app = agentic_flow.compile()
 # ---------------------------------------------------------------------
 # Stream printing + interactive loop (single loop; passes HumanMessage)
 # ---------------------------------------------------------------------
 
 def save_graph(filename):
-    png_bytes = exp.get_graph().draw_mermaid_png()
+    png_bytes = agentic_flow.get_graph().draw_mermaid_png()
     # Try to display if running in an environment that supports it
     try:
         display(Image(png_bytes))
@@ -295,7 +339,9 @@ if __name__ == "__main__":
     # Clear memory file at startup by opening and closing it in write mode
     open("supervisor_memory.json", 'w').close()
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
-    llm = ChatOllama(model=select_model_func())
+
+    selected_model_supervisor = select_model_func()
+    
     # Prompt user for first input
     user_input = input("\nEnter: ")
     # Continue session until user types "exit"
@@ -303,7 +349,7 @@ if __name__ == "__main__":
         # Wrap user input into a HumanMessage and pass it to the graph
         human_msg = HumanMessage(content=user_input)
         # Stream responses and print them as they arrive
-        _ = print_stream(exp.stream({"messages": [human_msg]}, stream_mode="values"))
+        _ = print_stream(app.stream({"messages": [human_msg]}, stream_mode="values"))
         # Ask for next user input
         user_input = input("\nEnter: ")
 
