@@ -52,7 +52,7 @@ selected_model_supervisor = "gpt-oss:120b-cloud"  # Global variable to hold the 
 def save_memory(messages: Iterable[BaseMessage], memory_file: Path = MEMORY_FILE):
     msgs = list(messages)[-MAX_MEMORY_MESSAGES:]
     memory_file.write_text(
-        json.dumps(messages_to_dict(msgs), indent=2)
+        json.dumps(messages_to_dict(msgs), indent=2),
         encoding="utf-8"
     )
 
@@ -106,7 +106,7 @@ def select_model_func():
                 # Ensure selected model is installed locally
                 while model_dict[model_option] not in installed_models:
                     print("The selected model is not available. Please choose from the list above.")
-                    print(f"Installed Models: {installed_models[1:]}")  # Display installed models
+                    print(f"Installed Models: {installed_models[1:}")  # Display installed models
                     model_option = int(input("Enter model option-> "))  # Prompt again
                 break  # Valid model found
         except Exception:
