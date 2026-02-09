@@ -149,9 +149,13 @@ def supervisor_call(state: AgentState) -> AgentState:
     """
     incoming = list(state["messages"])
     
-    system_text =f"You are the supervisor of AI agents responsible for overseeing their tasks to complete a penetration test."\
-        f"managing a conversation between the following workers: {agents}. Given the following user request, respond with the worker to act next.\
-      Each worker will perform a task and respond with their results and status. When finished, respond with Objectives_met."
+    system_text ="\n". join([
+        f"You are the supervisor of AI agents responsible for overseeing their tasks to complete a penetration test.",
+        f"managing a conversation between the following workers: {agents}.", 
+        "Given the following user request, respond with the worker to act next.",
+      "Each worker will perform a task and respond with their results and status.",
+        "When finished, respond with Objectives_met."
+    ])
     
 
     # Compose full input prompt: system message + memory + current input
