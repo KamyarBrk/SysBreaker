@@ -52,7 +52,7 @@ selected_model_supervisor = "gpt-oss:120b-cloud"  # Global variable to hold the 
 def save_memory(messages: Iterable[BaseMessage], memory_file: Path = MEMORY_FILE):
     msgs = list(messages)[-MAX_MEMORY_MESSAGES:]
     memory_file.write_text(
-        json.dumps(messages_to_dict(msgs), indent=2),
+        json.dumps(messages_to_dict(msgs), indent=2)
         encoding="utf-8"
     )
 
