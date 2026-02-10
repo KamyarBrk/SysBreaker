@@ -228,17 +228,15 @@ def print_stream(stream):
     """
     Iterates over a streaming LangGraph output and prints each message nicely.
     """
-    for s in stream:
-        message = s["messages"][-1]
-        
-        # FIX: prevent echoing the user's input back to the console
-        if isinstance(message, HumanMessage):
-            continue
-
-        try:
-            message.pretty_print()
-        except Exception:
+    for s in stream:  # Iterate over message stream events
+        message = s["messages"][-1]  # Get the most recent message
+        if isinstance(message, tuple):  # If it's a tuple (e.g. command output)
             print(message)
+        else:
+            try:
+                message.pretty_print()  # Use LangChain’s formatted print method
+            except Exception:
+                print(message)  # Fallback: print raw message
 
 # ---------------------------------------------------------------------
 # Main entry point for interactive session
