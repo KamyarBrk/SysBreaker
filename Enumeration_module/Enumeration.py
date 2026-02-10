@@ -417,18 +417,18 @@ def print_stream(stream):
 # ---------------------------------------------------------------------
 # Main entry point for interactive session
 # ---------------------------------------------------------------------
-if __name__ == "__main__":
+
     # Clear memory file at startup by opening and closing it in write mode
-    open("enumeration_memory.json", 'w').close()
+    #open("enumeration_memory.json", 'w').close()
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
     
     # Prompt user for first input
-    user_input = input("\nEnter: ")
+    #user_input = input("\nEnter: ")
     # Continue session until user types "exit"
-    while user_input != 'exit':
+    #while user_input != 'exit':
         # Wrap user input into a HumanMessage and pass it to the graph
-        human_msg = HumanMessage(content=user_input)
+        #human_msg = HumanMessage(content=user_input)
         # Stream responses and print them as they arrive
-        _ = print_stream(enum.stream({"messages": [human_msg]}, stream_mode="values"))
+        #_ = print_stream(enum.stream({"messages": [human_msg]}, stream_mode="values"))
         # Ask for next user input
-        user_input = input("\nEnter: ")
+        #user_input = input("\nEnter: ")

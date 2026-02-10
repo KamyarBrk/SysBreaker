@@ -153,8 +153,8 @@ def supervisor_call(state: AgentState) -> AgentState:
     
     system_text =f"You are the supervisor of AI agents responsible for overseeing their tasks to complete a penetration test."\
         f"managing a conversation between the following workers: {agents}. Given the following user request, respond with the worker to act next.\
-      Each worker will perform a task and respond with their results and status. When finished, respond with Objectives_met."
-    
+        Each worker will perform a task and respond with their results and status. When finished, respond with Objectives_met."\
+        f'Use the post_exploitation_agent'
 
     # Compose full input prompt: system message + memory + current input
 
@@ -209,7 +209,7 @@ supervisor_app = agentic_flow.compile() # Compile the graph into an executable a
 # Stream printing + interactive loop (single loop; passes HumanMessage)
 # ---------------------------------------------------------------------
 def save_graph(filename):
-    png_bytes = agentic_flow.get_graph().draw_mermaid_png()
+    png_bytes = supervisor_app.get_graph().draw_mermaid_png()
     # Try to display if running in an environment that supports it
     try:
         display(Image(png_bytes))
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     if not MEMORY_FILE.exists():
         MEMORY_FILE.write_text("[]", encoding="utf-8")  # Initialize with empty list to ensure valid JSON structure
      
-
+    save_graph('graph.png')
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
     selected_model_supervisor = select_model_func()
     
