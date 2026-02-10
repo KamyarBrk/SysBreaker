@@ -323,6 +323,7 @@ def recon_call(state: AgentState) -> AgentState:
     full_prompt = [system_prompt] + mem_msgs + incoming
 
     # Invoke LLM with full prompt
+    llm = ChatOllama(model='gpt-oss:120b-cloud').bind_tools(tools)
     response = llm.invoke(full_prompt)
 
     # Update stored memory with new interaction (adds human + AI messages)
@@ -415,7 +416,7 @@ if __name__ == "__main__":
     # Clear memory file at startup by opening and closing it in write mode
     open("recon_memory.json", 'w').close()
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
-    llm = ChatOllama(model=select_model_func()).bind_tools(tools)
+    
     # Prompt user for first input
     user_input = input("\nEnter: ")
     # Continue session until user types "exit"

@@ -106,7 +106,7 @@ def select_model_func():
                 # Ensure selected model is installed locally
                 while model_dict[model_option] not in installed_models:
                     print("The selected model is not available. Please choose from the list above.")
-                    print(f"Installed Models: {installed_models[1:}")  # Display installed models
+                    print(f"Installed Models: {installed_models[1:]}")  # Display installed models
                     model_option = int(input("Enter model option-> "))  # Prompt again
                 break  # Valid model found
         except Exception:
