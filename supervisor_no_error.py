@@ -38,6 +38,8 @@ from Exploitation_module.Exploitation import exp_call
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import messages_to_dict, messages_from_dict
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.exceptions import OutputParserException
 
 try:
     current_dir = Path(__file__).parent
@@ -142,7 +144,7 @@ options = ["Objectives_met"] + agents
 class RouteOut(BaseModel):
     next: Literal["Objectives_met", "Recon_agent","Enumeration_agent","Exploitation_agent","Post_Exploitation_agent"]
 
-
+parser = PydanticOutputParser(pydantic_object=RouteOut)
 def supervisor_call(state: AgentState) -> AgentState:
     """
     Routes to exactly one worker (or Objectives_met) based on current penetration testing progress.
@@ -159,14 +161,18 @@ def supervisor_call(state: AgentState) -> AgentState:
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_text),
         MessagesPlaceholder(variable_name="messages"),
-        ("system", f"Pick exactly one: {', '.join(options)}")
-    ])
+        ("system",
+         "Pick exactly one of: " + ", ".join(options) + "\n"
+         "Return ONLY JSON that matches the schema below.\n"
+         "{format_instructions}")
+    ]).partial(format_instructions=parser.get_format_instructions())
 
 
-    llm = ChatOllama(model=selected_model_supervisor,temperature=0)  # Initialize LLM with selected model and low temperature for deterministic output
-    supervisor_chain = prompt | llm.with_structured_output(RouteOut)
+    llm = ChatOllama(model=selected_model_supervisor, temperature=0, format="json")
 
-    routed: RouteOut = supervisor_chain.invoke({"messages": incoming})
+    chain = prompt | llm | parser
+
+    routed: RouteOut = chain.invoke({"messages": incoming})
   
     next_role = routed.next # Extract the next role/agent to invoke from the structured output of the supervisor's response
 
