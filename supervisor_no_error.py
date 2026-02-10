@@ -238,7 +238,6 @@ def print_stream(stream):
             except Exception:
                 print(message)  # Fallback: print raw message
 
-
 # ---------------------------------------------------------------------
 # Main entry point for interactive session
 # ---------------------------------------------------------------------
