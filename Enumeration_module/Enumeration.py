@@ -45,14 +45,19 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 
 # --- Simple file-backed conversation memory settings ---
-MEMORY_FILE = Path("enumeration_memory.json")  # Path to the file used to persist chat memory
+#MEMORY_FILE = Path("enumeration_memory.json")  # Path to the file used to persist chat memory
+try:
+    current_dir = Path(__file__).parent
+except NameError:
+    current_dir = Path.cwd()
+MEMORY_FILE =  current_dir / "enumeration_memory.json" 
 MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text"    # use the ollama run nomic-embed-text the first time you run this code
 )
-
-pdf_path = r"Training_documents/enum_training/telnet-cheat-sheet.pdf"
+pdf_path = Path(__file__).resolve().with_name("telnet-cheat-sheet.pdf")
+#pdf_path = r"Training_documents/enum_training/telnet-cheat-sheet.pdf"
 
 # Ensure the PDF file exists
 if not os.path.exists(pdf_path):
