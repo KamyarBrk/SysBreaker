@@ -56,7 +56,7 @@ MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent 
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text"    # use the ollama run nomic-embed-text the first time you run this code
 )
-pdf_path = Path(__file__).resolve().with_name("telnet-cheat-sheet.pdf")
+pdf_path = (Path(__file__).resolve().parents[1] / "Training_documents" / "enum_training" / "telnet-cheat-sheet.pdf")
 #pdf_path = r"Training_documents/enum_training/telnet-cheat-sheet.pdf"
 
 # Ensure the PDF file exists
