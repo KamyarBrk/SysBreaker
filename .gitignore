@@ -7,4 +7,4 @@ path to/your/persisted/vectorstore
 vectors/*
 
 # But do not ignore the .gitkeep files:
-!vectors/.gitkeep
+!vectors/vectors.gitkeep
