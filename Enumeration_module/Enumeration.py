@@ -365,7 +365,6 @@ graph = StateGraph(AgentState)  # Initialize graph with defined state type
 graph.add_node("enum_agent", enum_call)  # Add enumeration node (LLM interaction)
 
 tool_node = ToolNode(tools=tools)  # Node that executes tool calls
-graph.add_node("tools", tool_node)  # Add the tool node to the graph
 graph.add_node("retriever_agent", tool_node)
 
 # Define conditional flow between nodes based on should_continue()
