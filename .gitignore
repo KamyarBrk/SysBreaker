@@ -1,6 +1,10 @@
+# Ignore everything inside the directories:
 .venv
 Enumeration_module/enumeration_memory.json
 enumeration_memory.json
 practice_stuff/
 path to/your/persisted/vectorstore
-vector/
+vectors/*
+
+# But do not ignore the .gitkeep files:
+!vectors/.gitkeep
