@@ -23,4 +23,6 @@ Rundown of the modules
 2. Open the folder in VS Code
 3. Run `.\setup.ps1` (Windows) or `chmod +x setup.sh` & `./setup.sh` (macOS/Linux) in the terminal. Note you need Python 3.11 or 3.12. 
 
+Make sure you are in the virtual environment before attempting to run any modules!
+
 **AI Model Setup Instructions**
