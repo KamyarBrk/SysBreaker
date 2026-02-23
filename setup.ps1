@@ -109,6 +109,9 @@ if ($LASTEXITCODE -ne 0) {
     Write-ErrorAndExit "pip install failed. See output above for errors."
 }
 
+Write-Host "Installing Ollama models..."
+ollama pull nomic-embed-text
+
 Write-Host ""
 Write-Host "== Success! Dependencies installed. ==" -ForegroundColor Green
 Write-Host ""
