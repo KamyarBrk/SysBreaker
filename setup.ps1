@@ -135,6 +135,6 @@ Write-Host "    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Current
 Write-Host "  Or run the setup non-persistently with:"
 Write-Host "    powershell -ExecutionPolicy Bypass -File .\\setup.ps1"
 Write-Host ""
-Write-Host "Done. Click the '+' icon in the top right of the terminal to open a new terminal in the venv." -ForegroundColor Yellow
+Write-Host "Done. Windows users should now run .venv\Scripts\activate.ps1 in the terminal to activate the virtual environment." -ForegroundColor Yellow
 Write-Host "You should then see '(.venv)' in green." -ForegroundColor Yellow
 Write-Host ""

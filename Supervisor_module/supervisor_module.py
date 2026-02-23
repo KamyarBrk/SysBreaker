@@ -45,69 +45,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 
 # --- Simple file-backed conversation memory settings ---
-#MEMORY_FILE = Path("enumeration_memory.json")  # Path to the file used to persist chat memory
-try:
-    current_dir = Path(__file__).parent
-except NameError:
-    current_dir = Path.cwd()
-MEMORY_FILE =  current_dir / "enumeration_memory.json" 
+MEMORY_FILE = Path("supervisor_memory.json")  # Path to the file used to persist chat memory
 MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text"    # use the ollama run nomic-embed-text the first time you run this code
-)
-pdf_path = (Path(__file__).resolve().parents[1] / "Training_documents" / "enum_training" / "telnet-cheat-sheet.pdf")
-#pdf_path = r"Training_documents/enum_training/telnet-cheat-sheet.pdf"
-
-# Ensure the PDF file exists
-if not os.path.exists(pdf_path):
-    raise FileNotFoundError(f"PDF file not found: {pdf_path}")
-
-pdf_loader = PyPDFLoader(pdf_path) # This loads the PDF
-
-try:
-    pages = pdf_loader.load()
-    print(f"PDF has been loaded and has {len(pages)} pages")
-except Exception as e:
-    print(f"Error loading PDF: {e}")
-    raise
-
-
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
-
-
-pages_split = text_splitter.split_documents(pages)
-
-persist_directory = r"./vectors"  # Update this path accordingly
-collection_name = "vector_storage"  # Update this accordingly
-
-# If our collection does not exist in the directory, we create using the os command
-if not os.path.exists(persist_directory):
-    os.makedirs(persist_directory)
-
-try:
-    # Here, we actually create the chroma database using our embeddings model
-    vectorstore = Chroma.from_documents(
-        documents=pages_split,
-        embedding=embeddings,
-        persist_directory=persist_directory,
-        collection_name=collection_name
-    )
-    print(f"Created ChromaDB vector store!")
-    
-except Exception as e:
-    print(f"Error setting up ChromaDB: {str(e)}")
-    raise
-
-
-# Now we create our retriever 
-retriever = vectorstore.as_retriever(
-    search_type="similarity",
-    search_kwargs={"k": 5} # K is the amount of chunks to return
-)
 
 # Helper function to determine message "role" string
 def _msg_role(m: BaseMessage) -> str:
@@ -194,7 +134,7 @@ def select_model_func():
     
     while True:
         # Display menu of available models
-        print("\nSelect a model for enumeration phase:")
+        print("\nSelect a model for Supervisor phase:")
         print("1: llama3.2:latest (less powerful)\n2: gpt-oss:20b (more powerful)\n3: gpt-oss:20b-cloud (more powerful)\n4: gpt-oss:120b-cloud (most powerful, largest)")
         print('')
         try:
@@ -227,83 +167,31 @@ def select_model_func():
     print(f"Selected model: {selected_model}")  # Confirmation output
     return selected_model  # Return selected model name
 
+
 # ---------------------------------------------------------------------
 # AgentState: defines the graph’s state type, containing message sequence
 # ---------------------------------------------------------------------
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]  # Annotated list of BaseMessages tracked by LangGraph
 
-@tool
-def retriever_tool(query: str) -> str:
-    """
-    This tool searches and returns the information from enumeration document.
-    """
 
-    docs = retriever.invoke(query)
-
-    if not docs:
-        return "I found no relevant information in the enumeration documents."
-    
-    results = []
-    for i, doc in enumerate(docs):
-        results.append(f"Document {i+1}:\n{doc.page_content}")
-    
-    return "\n\n".join(results)
-
-# ---------------------------------------------------------------------
-# Define a callable "tool" that can execute shell commands from AI requests
+#Supervisor Tools for each phase
 # ---------------------------------------------------------------------
 @tool
-def commands(command: str):
+
+def run_recon(target: str) -> str:
     """
-    Tool that allows the AI model to run shell commands on the host system.
-    Returns the command's stdout, stderr, and exit code.
+    A simple reconnaissance tool that pings a target and returns the result.
     """
-    result = subprocess.run(
-        command,  # The shell command to execute
-        shell=isinstance(command, str),  # Run in shell mode if command is a string
-        capture_output=True,  # Capture stdout and stderr
-        text=True  # Decode output as text instead of bytes
-    )
-    # Return a tuple of stdout, stderr, and exit code
-    return result.stdout.strip(), result.stderr.strip(), result.returncode
 
-# Register available tools in a list
-tools = [commands, retriever_tool]
 
-tools_dict = {our_tool.name: our_tool for our_tool in tools}
-# Retriever Agent
-'''def take_action(state: AgentState) -> AgentState:
-    """Execute tool calls from the LLM's response."""
+    try:
+        proc = subprocess.run(["ping", "-c", "4", target], capture_output=True, text=True, check=True)
+        return proc.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Error during ping: {e.stderr}"
 
-    tool_calls = state['messages'][-1].tool_calls
-    results = []
-    for t in tool_calls:
-        print(f"Calling Tool: {t['name']} with query: {t['args'].get('query', 'No query provided')}")
-        
-        if not t['name'] in tools_dict: # Checks if a valid tool is present
-            print(f"\nTool: {t['name']} does not exist.")
-            result = "Incorrect Tool Name, Please Retry and Select tool from List of Available tools."
-        
-        else:
-            result = tools_dict[t['name']].invoke(t['args'].get('query', ''))
-            print(f"Result length: {len(str(result))}")
-            
-
-        # Appends the Tool Message
-        results.append(ToolMessage(tool_call_id=t['id'], name=t['name'], content=str(result)))
-
-    print("Tools Execution Complete. Back to the model!")
-    return {'messages': results}'''
-
-# ---------------------------------------------------------------------
-# enum_call now uses file-backed memory (this is the enum_call that will be
-# registered in the graph below, BEFORE compilation)
-# ---------------------------------------------------------------------
-# ---------------------------------------------------------------------
-# Define the main callable node (enum_call) that interacts with LLM + memory
-# ---------------------------------------------------------------------
-def enum_call(state: AgentState) -> AgentState:
+def supervisor_call(state: AgentState) -> AgentState:
     """
     Main callable node in the LangGraph. 
     Loads memory, adds new input messages, calls the LLM, saves the updated memory, 
@@ -322,17 +210,13 @@ def enum_call(state: AgentState) -> AgentState:
 
     # Define the system-level prompt for this LLM call
     system_prompt = SystemMessage(
-        content="You are an AI model that performs the enumeration phase of a penetration test."\
-        #"Use the enumeration documents provided to better complete the enumeration tasks."\
-        "Provide the vulnerability that may be exposed if given a port"
-        "Always cite where you got your information from the enumeration documents"
+        content="You are the supervisor of AI agents responsible for overseeing their tasks. "
     )
 
     # Compose full input prompt: system message + memory + current input
     full_prompt = [system_prompt] + mem_msgs + incoming
 
     # Invoke LLM with full prompt
-    llm = ChatOllama(model='gpt-oss:120b-cloud').bind_tools(tools)
     response = llm.invoke(full_prompt)
 
     # Update stored memory with new interaction (adds human + AI messages)
@@ -362,14 +246,15 @@ def should_continue(state: AgentState):
 # Create and connect the LangGraph execution graph
 # ---------------------------------------------------------------------
 graph = StateGraph(AgentState)  # Initialize graph with defined state type
-graph.add_node("enum_agent", enum_call)  # Add enumeration node (LLM interaction)
+graph.add_node("super_agent", supervisor_call)  # Add exploitation node (LLM interaction)
 
-tool_node = ToolNode(tools=tools)  # Node that executes tool calls
-graph.add_node("retriever_agent", tool_node)
+#tool_node = ToolNode(tools=tools)  # Node that executes tool calls
+#graph.add_node("tools", tool_node)  # Add the tool node to the graph
+#graph.add_node("retriever_agent", tool_node)
 
 # Define conditional flow between nodes based on should_continue()
 graph.add_conditional_edges(
-    "enum_agent",
+    "super_agent",
     should_continue,
     {
         "continue": "retriever_agent",  # If tool call exists, go to tools node
@@ -377,19 +262,18 @@ graph.add_conditional_edges(
     },
 )
 
-graph.add_edge("retriever_agent", "enum_agent")  # After running a tool, go back to LLM node
+#graph.add_edge("retriever_agent", "exp_agent")  # After running a tool, go back to LLM node
 
-graph.set_entry_point("enum_agent")
+graph.set_entry_point("super_agent")
 
-
-enum = graph.compile()  # Compile graph into runnable pipeline
+exp = graph.compile()  # Compile graph into runnable pipeline
 
 # ---------------------------------------------------------------------
 # Stream printing + interactive loop (single loop; passes HumanMessage)
 # ---------------------------------------------------------------------
 
 def save_graph(filename):
-    png_bytes = enum.get_graph().draw_mermaid_png()
+    png_bytes = exp.get_graph().draw_mermaid_png()
     # Try to display if running in an environment that supports it
     try:
         display(Image(png_bytes))
@@ -421,18 +305,20 @@ def print_stream(stream):
 # ---------------------------------------------------------------------
 # Main entry point for interactive session
 # ---------------------------------------------------------------------
-
+if __name__ == "__main__":
     # Clear memory file at startup by opening and closing it in write mode
-    #open("enumeration_memory.json", 'w').close()
+    open("supervisor_memory.json", 'w').close()
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
-    
+    llm = ChatOllama(model=select_model_func())
     # Prompt user for first input
-    #user_input = input("\nEnter: ")
+    user_input = input("\nEnter: ")
     # Continue session until user types "exit"
-    #while user_input != 'exit':
+    while user_input != 'exit':
         # Wrap user input into a HumanMessage and pass it to the graph
-        #human_msg = HumanMessage(content=user_input)
+        human_msg = HumanMessage(content=user_input)
         # Stream responses and print them as they arrive
-        #_ = print_stream(enum.stream({"messages": [human_msg]}, stream_mode="values"))
+        _ = print_stream(exp.stream({"messages": [human_msg]}, stream_mode="values"))
         # Ask for next user input
-        #user_input = input("\nEnter: ")
+        user_input = input("\nEnter: ")
+
+
