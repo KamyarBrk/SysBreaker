@@ -36,4 +36,7 @@ else
     exit 1
 fi
 
+echo "Installing Ollama models..."
+ollama pull nomic-embed-text
+
 echo "Environment setup complete."
