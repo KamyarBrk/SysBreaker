@@ -17,6 +17,10 @@ Rundown of the modules
 	**Post-Exploitation**
 	Analyzes the results of the exploitation module and suggests fixes to the environment.
 
+**AI Model Setup Instructions**
+
+Before running any scripts, Ollama must be downloaded. You can get it from https://ollama.com/download
+
 **Local Python Environment Setup Instructions**
 
 1. Clone the repo locally in VS code
@@ -24,5 +28,3 @@ Rundown of the modules
 3. Run `.\setup.ps1` (Windows) or `chmod +x setup.sh` & `./setup.sh` (macOS/Linux) in the terminal. Note you need Python 3.11 or 3.12. 
 
 Make sure you are in the virtual environment before attempting to run any modules!
-
-**AI Model Setup Instructions**
