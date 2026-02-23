@@ -89,7 +89,7 @@ if not os.path.exists(persist_directory):
     os.makedirs(persist_directory)
 
 try:
-    # Here, we actually create the chroma database using our embeddigns model
+    # Here, we actually create the chroma database using our embeddings model
     vectorstore = Chroma.from_documents(
         documents=pages_split,
         embedding=embeddings,
