@@ -35,3 +35,8 @@ Once Ollama is installed, run: ``ollama run gpt-oss:120b-cloud`` and sign in.
 3. Run `.\setup.ps1` (Windows) or `chmod +x setup.sh` & `./setup.sh` (macOS/Linux) in the terminal. Note you need Python 3.11 or 3.12. 
 
 Make sure you are in the virtual environment before attempting to run any modules!
+
+<img width="813" height="429" alt="image" src="https://github.com/user-attachments/assets/fce8b7d1-1cb2-4ec6-9075-ff710ff51dc5" />
+<img width="615" height="230" alt="image" src="https://github.com/user-attachments/assets/840a92fe-398d-43db-8a04-42940880a757" />
+
+
