@@ -1,18 +1,20 @@
-
 {
-  // Windows users (VS Code will use this interpreter automatically)
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  // This helps VS Code find the venv regardless of OS
+  "python.defaultInterpreterPath": ".venv",
 
-  // Auto-activate the selected interpreter in new integrated terminals
+  // Ensures that when you click "New Terminal", the venv is already active
   "python.terminal.activateEnvironment": true,
 
-  // If some contributors are on macOS/Linux, they can add this override in their local user settings,
-  // or edit this file to the unix path: "${workspaceFolder}/.venv/bin/python"
-  //
-  // Note: older VS Code versions used "python.pythonPath" — modern Python extension prefers defaultInterpreterPath.
-
+  // Modern Analysis Settings
   "python.analysis.autoImportCompletions": true,
-  "python.linting.enabled": true,
+  "python.analysis.typeCheckingMode": "basic",
+  
+  // Testing
+  "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestEnabled": true
+
+  // Optional: Tells VS Code to ignore the venv folder during searches
+  "search.exclude": {
+    "**/.venv": true
+  }
 }
