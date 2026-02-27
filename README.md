@@ -19,7 +19,8 @@ Rundown of the modules
 
 **AI Model Setup Instructions**
 
-Before running any scripts, Ollama must be downloaded. You can get it from https://ollama.com/download or use the terminal:
+Before running any scripts, Ollama must be downloaded. You can get it from https://ollama.com/download or in the terminal:
+
 Linux/macOS: ``curl -fsSL https://ollama.com/install.sh | sh``
 Windows: ``irm https://ollama.com/install.ps1 | iex``
 
