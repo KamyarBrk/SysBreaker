@@ -17,6 +17,8 @@ Rundown of the modules
 	**Post-Exploitation**
 	Analyzes the results of the exploitation module and suggests fixes to the environment.
 
+# SETUP
+
 **AI Model Setup Instructions**
 
 Before running any scripts, Ollama must be downloaded. You can get it from https://ollama.com/download or in the terminal:
