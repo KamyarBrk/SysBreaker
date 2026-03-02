@@ -22,7 +22,7 @@ from langchain_ollama import ChatOllama
 from langgraph.graph.message import add_messages
 
 # Import LangGraph’s core graph components for constructing conversational state graphs.
-from langgraph.graph import StateGraph, END
+from langgraph.graph import MessagesState, END
 
 # subprocess is used to run system commands and capture their outputs.
 import subprocess
@@ -34,13 +34,15 @@ import json
 from pathlib import Path
 from IPython.display import display,Image
 from typing_extensions import NotRequired, Literal
-from Enumeration_module.Enumeration import enum_call
-from Recon_module.Recon import recon_call
-from Post_Exploitation_module.post_exploitation import post_exp_call
-from Exploitation_module.Exploitation import exp_call
+#from Enumeration_module.Enumeration import enum_call
+#from Recon_module.Recon import recon_call
+#from Post_Exploitation_module.post_exploitation import post_exp_call
+#from Exploitation_module.Exploitation import exp_call
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
+from langchain.agents import create_agent
+from langgraph.types import Command
+from langgraph.graph import START, StateGraph
 
 # --- Simple file-backed conversation memory settings ---
 MEMORY_FILE = Path("supervisor_memory.json")  # Path to the file used to persist chat memory
@@ -166,6 +168,86 @@ def select_model_func():
     print(f"Selected model: {selected_model}")  # Confirmation output
     return selected_model  # Return selected model name
 
+# ---------------------------------------------------------------------
+# Define a callable "tool" that can execute shell commands from AI requests
+# ---------------------------------------------------------------------
+@tool
+def commands(command: str):
+    """
+    Tool that allows the AI model to run shell commands on the host system.
+    Returns the command's stdout, stderr, and exit code.
+    """
+    result = subprocess.run(
+        command,  # The shell command to execute
+        shell=isinstance(command, str),  # Run in shell mode if command is a string
+        capture_output=True,  # Capture stdout and stderr
+        text=True  # Decode output as text instead of bytes
+    )
+    # Return a tuple of stdout, stderr, and exit code
+    return result.stdout.strip(), result.stderr.strip(), result.returncode
+
+
+
+
+recon_agent = create_agent(
+                        model=selected_model_supervisor,
+                        tools=[commands],
+                        system_prompt = "You are the reconnisance agent conducting a pentest, you are only to do reconnisance on the inforamtion given to you by the supervisor agent to find information, return your output to the supervisor"
+                )
+'''
+enum_agent = create_agent(
+    llm=selected_model_supervisor,
+    tools = commands,
+    system_prompt = "You are the enumeration agent conducting a pentest, you are only to do enumeration on the inforamtion given to you by the recon/supervisor agents to find vulnerabilities, return your output to the supervisor"
+)
+
+exploit_agent = create_agent(
+    llm=selected_model_supervisor,
+    tools = commands,
+    system_prompt = "You are the exploitation agent conducting a pentest, you are only to do exploitation on the inforamtion given to you by the enumeration/supervisor agents to exploit vulnerabilities, return your output to the supervisor"
+)
+
+post_agent = create_agent(
+    llm=selected_model_supervisor,
+    tools = commands,
+    system_prompt = "You are the post exploitation agent conducting a pentest, you are only to do priviledge escalation and keep persistance on the inforamtion given to you by the exploitation/supervisor agents to exploit further vulnerabilities, return your output to the supervisor"
+)
+'''
+
+
+#def enum_node(state: AgentState):
+#    result = enum_agent.invoke(state)
+#    return Command(
+#        update={
+#            "messages": state["messages"] + [
+#                AIMessage(content=result["messages"][-1].content, name="enum_node")
+#            ]
+#        },
+#        goto="supervisor"
+#    )
+
+#def exploit_node(state: AgentState):
+#    result = exploit_agent.invoke(state)
+#    return Command(
+#        update={
+#            "messages": state["messages"] + [
+#                AIMessage(content=result["messages"][-1].content, name="exploit_node")
+#            ]
+#        },
+#        goto="supervisor"
+#    )
+
+#def post_node(state: AgentState):
+#    result = post_agent.invoke(state)
+#    return Command(
+#        update={
+#            "messages": state["messages"] + [
+#                AIMessage(content=result["messages"][-1].content, name="post_node")
+#            ]
+#        },
+#        goto="supervisor"
+#    )
+
 
 # ---------------------------------------------------------------------
 # AgentState: defines the graph’s state type, containing message sequence
@@ -182,13 +264,28 @@ graph = StateGraph(AgentState)  # Initialize graph with defined state type
 # Creating the supervisor module
 # ---------------------------------------------------------------------
 
-agents = ["Recon_agent","Enumeration_agent", "Exploitation_agent", "Post_Exploitation_agent"]
+def recon_node(state:AgentState):
+    result = recon_agent.invoke(state)
+    return Command(
+        update={
+            "messages": state["messages"] + [
+                AIMessage(content=result["messages"][-1].content, name="recon_node")
+            ]
+        },
+        goto="supervisor"
+    )
 
-options = ["Objectives_met"] + agents
+
+
+agents = {'recon_node': 'specialized agent for reconnisance in the penetration test workflow'}
+
+options = list(agents.keys()) + ["FINISH"]
+
+worker_info = '\n\n'.join([f'WORKER: {member} \nDESCRIPTION: {description}' for member, description in agents.items()]) + '\n\nWORKER: FINISH \nDESCRIPTION: If User Query is answered and route to Finished'
 
 class RouteOut(BaseModel):
-    next: Literal["Objectives_met", "Recon_agent","Enumeration_agent","Exploitation_agent","Post_Exploitation_agent"]
-
+    next: Literal[[*options], ..., "worker to route to next, route to FINISH"]
+    reasoning: Annotated[str, ..., "Support proper reasoning for routing to the worker"]
 
 '''
 route_tool = {
@@ -214,13 +311,29 @@ route_tool = {
 tools = [route_tool]
 '''
 
-def supervisor_call(state: AgentState) -> AgentState:
+def supervisor_node(state: AgentState) -> Command[Literal[*list(agents.keys()), "__end__"]]:
     """
     Main callable node in the LangGraph. 
     Loads memory, adds new input messages, calls the LLM, saves the updated memory, 
     and returns the new state.
     """
-    # Load previously saved conversation memory
+    messages = [
+        {"role": "system", "content": system_prompt},
+    ] + [state["messages"][-1]]
+    query = ''
+    if len(state['messages'])==1:
+        query = state['messages'][0].content
+    response = llm.with_structured_output(Router).invoke(messages)
+    goto = response["next"]
+    if goto == "FINISH":
+        goto = END
+    if query:
+        return Command(goto=goto, update={"next": goto,'query':query,'cur_reasoning':response["reasoning"],
+                                    "messages":[HumanMessage(content=f"user's identification number is {state['id_number']}")]
+                        })
+    return Command(goto=goto, update={"next": goto,'cur_reasoning':response["reasoning"]})
+
+'''    # Load previously saved conversation memory
     mem_msgs = load_memory()
 
     # Normalize input messages from state into BaseMessage objects
@@ -272,38 +385,25 @@ def supervisor_call(state: AgentState) -> AgentState:
 
     # Return new graph state containing only the model's response
     #return {"messages": [response], "next": next_role}
-
+'''
 
 # ---------------------------------------------------------------------
 # Create and connect the LangGraph execution graph
 # ---------------------------------------------------------------------
 
-agentic_flow = StateGraph(AgentState)
-agentic_flow.add_node("supervisor",supervisor_call)
-agentic_flow.add_node("Recon_agent",recon_call)
-agentic_flow.add_node("Enumeration_agent",enum_call)
-agentic_flow.add_node("Exploitation_agent",exp_call)
-agentic_flow.add_node("Post_Exploitation_agent",post_exp_call)
+agent = StateGraph(AgentState)
+agent.add_edge(START, "supervisor")
+agent.add_node("supervisor", supervisor_node)
+agent.add_node("recon_node", recon_node)
+graph  =agent.compile()
 
-# Events: Worker -> Supervisor
-for agent in agents:
-    agentic_flow.add_edge(agent, "supervisor")
-
-
-# Events: Supervisor -> Worker (Conditional)
-conditional_map = {j: j for j in agents}
-conditional_map["Objectives_met"] = END
-agentic_flow .add_conditional_edges("supervisor", lambda x: x["next"], conditional_map)
-
-agentic_flow.set_entry_point("supervisor")
-
-app = agentic_flow.compile()
+app = agent.compile()
 # ---------------------------------------------------------------------
 # Stream printing + interactive loop (single loop; passes HumanMessage)
 # ---------------------------------------------------------------------
-
+'''
 def save_graph(filename):
-    png_bytes = agentic_flow.get_graph().draw_mermaid_png()
+    png_bytes = agent.get_graph().draw_mermaid_png()
     # Try to display if running in an environment that supports it
     try:
         display(Image(png_bytes))
@@ -314,7 +414,8 @@ def save_graph(filename):
         f.write(png_bytes)
     print(f"Graph saved as {filename}")
 
-
+save_graph('graph.png')
+'''
 # ---------------------------------------------------------------------
 # Streaming output printer: handles incremental message printing
 # ---------------------------------------------------------------------
