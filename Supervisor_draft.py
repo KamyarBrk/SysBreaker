@@ -38,7 +38,7 @@ from typing_extensions import NotRequired, Literal
 #from Recon_module.Recon import recon_call
 #from Post_Exploitation_module.post_exploitation import post_exp_call
 #from Exploitation_module.Exploitation import exp_call
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
 from langgraph.types import Command
@@ -49,6 +49,7 @@ MEMORY_FILE = Path("supervisor_memory.json")  # Path to the file used to persist
 MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
 selected_model_supervisor = None  # Global variable to hold the user-selected Ollama model for the supervisor agent
+
 
 # Helper function to determine message "role" string
 def _msg_role(m: BaseMessage) -> str:
@@ -283,9 +284,19 @@ options = list(agents.keys()) + ["FINISH"]
 
 worker_info = '\n\n'.join([f'WORKER: {member} \nDESCRIPTION: {description}' for member, description in agents.items()]) + '\n\nWORKER: FINISH \nDESCRIPTION: If User Query is answered and route to Finished'
 
-class RouteOut(BaseModel):
-    next: Literal[[*options], ..., "worker to route to next, route to FINISH"]
-    reasoning: Annotated[str, ..., "Support proper reasoning for routing to the worker"]
+system_prompt = (
+    f"You are the supervisor of AI agents responsible for overseeing their tasks to complete a penetration test. "
+    f"Managing a conversation between the following workers: {agents}. "
+    f"Given the user request, respond with the worker to act next. "
+    f"You MUST respond ONLY with a valid JSON object in this exact format, nothing else:\n"
+    f'{{ "next": "<worker_name>", "reasoning": "<your reasoning>" }}\n'
+    f"Valid values for 'next' are: {options}"
+)
+
+class Router(BaseModel):
+    """Worker to route to next. If no workers needed, route to FINISH."""
+    next: Literal[*options] = Field(description="worker to route to next, route to FINISH")
+    reasoning: str = Field(description="Support proper reasoning for routing to the worker")
 
 '''
 route_tool = {
@@ -311,7 +322,8 @@ route_tool = {
 tools = [route_tool]
 '''
 
-def supervisor_node(state: AgentState) -> Command[Literal[*list(agents.keys()), "__end__"]]:
+keys = list(agents.keys())
+def supervisor_node(state: AgentState) -> Command[Literal[*keys, "__end__"]]:
     """
     Main callable node in the LangGraph. 
     Loads memory, adds new input messages, calls the LLM, saves the updated memory, 
@@ -323,13 +335,12 @@ def supervisor_node(state: AgentState) -> Command[Literal[*list(agents.keys()), 
     query = ''
     if len(state['messages'])==1:
         query = state['messages'][0].content
-    response = llm.with_structured_output(Router).invoke(messages)
-    goto = response["next"]
+    response = llm.with_structured_output(Router, method="json_mode").invoke(messages)
+    goto = response.next
     if goto == "FINISH":
         goto = END
     if query:
-        return Command(goto=goto, update={"next": goto,'query':query,'cur_reasoning':response["reasoning"],
-                                    "messages":[HumanMessage(content=f"user's identification number is {state['id_number']}")]
+        return Command(goto=goto, update={"next": goto,'query':query,'cur_reasoning':response.reasoning,
                         })
     return Command(goto=goto, update={"next": goto,'cur_reasoning':response["reasoning"]})
 
@@ -442,16 +453,24 @@ if __name__ == "__main__":
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
 
     selected_model_supervisor = select_model_func()
-    
+    llm = ChatOllama(model=selected_model_supervisor)
     # Prompt user for first input
     user_input = input("\nEnter: ")
+    inputs = [
+        HumanMessage(content=user_input)
+    ]
+    config = {"configurable": {"thread_id": "1", "recursion_limit": 10}} 
+    
+    state = {'messages': inputs}
+    result = graph.invoke(input=state,config=config)
     # Continue session until user types "exit"
-    while user_input != 'exit':
+''' while user_input != 'exit':
         # Wrap user input into a HumanMessage and pass it to the graph
         human_msg = HumanMessage(content=user_input)
         # Stream responses and print them as they arrive
         _ = print_stream(app.stream({"messages": [human_msg]}, stream_mode="values"))
         # Ask for next user input
-        user_input = input("\nEnter: ")
+        user_input = input("\nEnter: ")'''
+
 
 
