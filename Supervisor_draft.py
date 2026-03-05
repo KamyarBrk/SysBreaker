@@ -30,6 +30,9 @@ import subprocess
 # json for serializing/deserializing the conversation memory to disk.
 import json
 
+from dotenv import load_dotenv
+load_dotenv(dotenv_path='.env', override=True)
+
 # Path from pathlib provides filesystem-safe handling for file paths.
 from pathlib import Path
 from IPython.display import display,Image
@@ -43,13 +46,15 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
 from langgraph.types import Command
 from langgraph.graph import START, StateGraph
+from langsmith import traceable
+
 
 # --- Simple file-backed conversation memory settings ---
 MEMORY_FILE = Path("supervisor_memory.json")  # Path to the file used to persist chat memory
 MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
-selected_model_supervisor = None  # Global variable to hold the user-selected Ollama model for the supervisor agent
-
+selected_model_supervisor = 'qwen3.5:397b-cloud'  # Global variable to hold the user-selected Ollama model for the supervisor agent
+llm = ChatOllama(model=selected_model_supervisor)
 
 # Helper function to determine message "role" string
 def _msg_role(m: BaseMessage) -> str:
@@ -189,9 +194,8 @@ def commands(command: str):
 
 
 
-
 recon_agent = create_agent(
-                        model=selected_model_supervisor,
+                        model=ChatOllama(model=selected_model_supervisor),
                         tools=[commands],
                         system_prompt = "You are the reconnisance agent conducting a pentest, you are only to do reconnisance on the inforamtion given to you by the supervisor agent to find information, return your output to the supervisor"
                 )
@@ -264,7 +268,7 @@ graph = StateGraph(AgentState)  # Initialize graph with defined state type
 # ---------------------------------------------------------------------
 # Creating the supervisor module
 # ---------------------------------------------------------------------
-
+@traceable
 def recon_node(state:AgentState):
     result = recon_agent.invoke(state)
     return Command(
@@ -293,10 +297,11 @@ system_prompt = (
     f"Valid values for 'next' are: {options}"
 )
 
-class Router(BaseModel):
-    """Worker to route to next. If no workers needed, route to FINISH."""
-    next: Literal[*options] = Field(description="worker to route to next, route to FINISH")
-    reasoning: str = Field(description="Support proper reasoning for routing to the worker")
+class Router(TypedDict):
+    """Worker to route to next. If no workers needed, route to FINISH. and provide reasoning for the routing"""
+
+    next: Annotated[Literal[*options], ..., "worker to route to next, route to FINISH"]
+    reasoning: Annotated[str, ..., "Support proper reasoning for routing to the worker"]
 
 '''
 route_tool = {
@@ -323,6 +328,7 @@ tools = [route_tool]
 '''
 
 keys = list(agents.keys())
+@traceable
 def supervisor_node(state: AgentState) -> Command[Literal[*keys, "__end__"]]:
     """
     Main callable node in the LangGraph. 
@@ -452,8 +458,7 @@ if __name__ == "__main__":
     open("supervisor_memory.json", 'w').close()
     # Ask user to select model, then initialize ChatOllama LLM bound with tools
 
-    selected_model_supervisor = select_model_func()
-    llm = ChatOllama(model=selected_model_supervisor)
+    
     # Prompt user for first input
     user_input = input("\nEnter: ")
     inputs = [
@@ -462,7 +467,7 @@ if __name__ == "__main__":
     config = {"configurable": {"thread_id": "1", "recursion_limit": 10}} 
     
     state = {'messages': inputs}
-    result = graph.invoke(input=state,config=config)
+    result = graph.invoke(input=state)
     # Continue session until user types "exit"
 ''' while user_input != 'exit':
         # Wrap user input into a HumanMessage and pass it to the graph
