@@ -55,6 +55,7 @@ def cve_lookup(software: str, version: str) -> str:
 Recon_agent_Prompt = (
     "You are an AI model that performs the reconnaissance phase of a penetration test."
         "Use the given tools provided to better complete the reconnaissance tasks."
+    "Do not provide security recommendations that is the job of the enumeration agent, your job is exclusively identifying ports"
 )
 
 recon_agent = create_agent(
@@ -74,6 +75,24 @@ enumeration_agent = create_agent(
     system_prompt=Enum_Agent_Prompt
 )
 
+Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in the target."
+                     "If there are no vulnerabilities reported you do not need to do anything"
+                     "Use the tools provided to exploit found vulnerabilities."
+                     "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
+expl_agent = create_agent(
+    llm,
+    tools=[]
+    , system_prompt=Expl_Agent_Prompt
+)
+
+Post_Agent_Prompt = ("You have the role of post-exploitation in the pentesting phase"
+                     "Your job is to do privilege escalation based on the exploit found by the exploitation agent"
+                     "If there is no exploits found you have no job to do and should not do any jobs")
+post_agent = create_agent(
+    llm,
+    tools=[],
+    system_prompt= Post_Agent_Prompt
+)
 
 
 @tool
@@ -106,15 +125,42 @@ def enum_node(request: str) -> str:
     })
     return result["messages"][-1].text
 
+@tool
+def expl_node(request: str) -> str:
+    """
+      This is the tool to call the exploit agent to perform exploitation of vulnerabilities that may be on the target system.
+
+      Args:
+          request: The request to run the exploitation agent on.
+
+      Returns: The whether or not it succeeded or not.
+      """
+    result = recon_agent.invoke({
+        "messages": [{"role": "user", "content": request}]
+    })
+    return result["messages"][-1].text
+
+@tool
+def post_node(request: str) -> str:
+    """
+    This is the tool to call the post exploitation agent to perform privilege escalation on the target system.
+
+    Args:
+        request: The request to run the post exploitation agent on (provide it with the information of exploit agent.
+
+    Returns: If it succeeded or not.
+    """
+
 SUPERVISOR_PROMPT = (
     "You are the supervisor of a pentest."
-    "You currently can do a portscan and enumerate possible threats"
-    "Make the appropriate tool calls and if multiple are needed use multiple tools"
+    "You currently can do a portscan enumerate possible threats exploit vulnerabilities, and post-exploitation tasks."
+    "Make the appropriate tool calls and if multiple are needed use multiple tools, each tool needs to be provided with the information of the previous tool if needed."
+    "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
 )
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node],
+    tools=[recon_node, enum_node, expl_node],
     system_prompt=SUPERVISOR_PROMPT,
 )
 
