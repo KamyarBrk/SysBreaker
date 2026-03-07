@@ -67,7 +67,9 @@ recon_agent = create_agent(
 
 
 Enum_Agent_Prompt = ("You are an AI model that performs the enumeration phase of a penetration test. "
-                     "If there is no vulnerability found tell the user there is no vulnerability found for now")
+                     "If there is no vulnerability found tell the user there is no vulnerability found for now"
+                     "You are to only find the vulnerabilities using the cve_lookup tool"
+                     "Your only job is to enumerate the information given to you nothing else, you should always respond to the supervisor whether a vulnerability was found or not")
 
 enumeration_agent = create_agent(
     llm,
@@ -146,7 +148,7 @@ def post_node(request: str) -> str:
     This is the tool to call the post exploitation agent to perform privilege escalation on the target system.
 
     Args:
-        request: The request to run the post exploitation agent on (provide it with the information of exploit agent.
+        request: The request to run the post exploitation agent on (provide it with the information of exploit agent).
 
     Returns: If it succeeded or not.
     """
