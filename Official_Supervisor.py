@@ -1,18 +1,96 @@
 
 import os
 from dotenv import load_dotenv
-load_dotenv(dotenv_path='.env', override=True)
-vulners_api = os.getenv("VULNERS_API_KEY")
+
 
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
 from nmap import nmap
-import vulners
+#import vulners
+from langchain_ollama.embeddings import OllamaEmbeddings
 
-from Recon_module.Recon import tools
+from pathlib import Path
+from langchain_chroma import Chroma
+from VectorDB_creator import create_vector_db
+from langgraph.checkpoint.memory import InMemorySaver 
+#load_dotenv(dotenv_path='.env', override=True)
+
+#vulners_api = os.getenv("VULNERS_API_KEY")
 
 llm = ChatOllama(model='qwen3.5:397b-cloud')
+
+try:
+    current_dir = Path(__file__).parent
+except NameError:
+    current_dir = Path.cwd()
+#MEMORY_FILE =  current_dir / "recon_memory.json"  # Path to the file used to persist chat memory
+#MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
+
+
+
+directory_path = Path(current_dir/"vector")
+
+# Check if the path exists and is a directory
+if directory_path.is_dir():
+    print("The VectorDB directory exists. Would you like to create a new vector database? This will overwrite the existing one. (yes/no)")
+    user_input = input("Enter->: ").strip().lower()
+    if user_input in ['yes', 'y']:  
+        create_vector_db()       
+
+else:
+    print("The VectorDB directory does not exist. A new vector database will be created.")
+    create_vector_db()
+
+embeddings = OllamaEmbeddings(
+    model="nomic-embed-text" 
+)
+
+#persist_directory = r"./vector" 
+persist_directory = current_dir/"vector"
+collection_name = "vector_storage" 
+
+if not os.path.exists(persist_directory):
+    raise FileNotFoundError(f"Database not found at {persist_directory}.")
+
+vectorstore = Chroma(
+    persist_directory=persist_directory,
+    embedding_function=embeddings,
+    collection_name=collection_name
+)
+
+# This defines the 'retriever' variable used in the tool below!
+retriever = vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 5} 
+)
+
+@tool
+def retriever_tool(query: str) -> str:
+    """
+    Searches the cybersecurity training knowledge base for methodologies, commands, 
+    and techniques related to enumeration, exploitation, post-exploitation, and recon.
+    """
+    # This now works because 'retriever' is defined right above it!
+    docs = retriever.invoke(query)
+
+    if not docs:
+        return "I found no relevant information in the knowledge base for that query."
+    
+    results = []
+    for i, doc in enumerate(docs):
+        # Using .get() prevents KeyError if the metadata doesn't exist
+        source = doc.metadata.get('source', 'Unknown File')
+        page = doc.metadata.get('page', 'Unknown Page')
+        
+        chunk_info = f"--- Result {i+1} ---\n"
+        chunk_info += f"Source: {source} (Page {page})\n"
+        chunk_info += f"Content: {doc.page_content}\n"
+        
+        results.append(chunk_info)
+    
+    return "\n\n".join(results)
+
 
 @tool
 def port_scanner(ip: str, arguments: str = "-sV") -> str:
@@ -26,6 +104,7 @@ def port_scanner(ip: str, arguments: str = "-sV") -> str:
     nm = nmap.PortScanner()
     return nm.scan(ip, arguments=arguments)
 
+'''
 @tool
 def cve_lookup(software: str, version: str) -> str:
     """
@@ -50,7 +129,7 @@ def cve_lookup(software: str, version: str) -> str:
         for r in results[:10]
     ]
     return trimmed
-
+'''
 
 Recon_agent_Prompt = (
     "You are an AI model that performs the reconnaissance phase of a penetration test."
@@ -60,7 +139,7 @@ Recon_agent_Prompt = (
 
 recon_agent = create_agent(
     llm,
-    tools=[port_scanner],
+    tools=[port_scanner,retriever_tool],
     system_prompt=Recon_agent_Prompt,
 )
 
@@ -73,7 +152,7 @@ Enum_Agent_Prompt = ("You are an AI model that performs the enumeration phase of
 
 enumeration_agent = create_agent(
     llm,
-    tools=[cve_lookup],
+    tools=[retriever_tool],
     system_prompt=Enum_Agent_Prompt
 )
 
@@ -83,7 +162,7 @@ Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in t
                      "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
 expl_agent = create_agent(
     llm,
-    tools=[]
+    tools=[retriever_tool]
     , system_prompt=Expl_Agent_Prompt
 )
 
@@ -92,7 +171,7 @@ Post_Agent_Prompt = ("You have the role of post-exploitation in the pentesting p
                      "If there is no exploits found you have no job to do and should not do any jobs")
 post_agent = create_agent(
     llm,
-    tools=[],
+    tools=[retriever_tool],
     system_prompt= Post_Agent_Prompt
 )
 
@@ -162,16 +241,22 @@ SUPERVISOR_PROMPT = (
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node, expl_node],
+    tools=[recon_node, enum_node, expl_node,post_node,retriever_tool],
     system_prompt=SUPERVISOR_PROMPT,
+    checkpointer=InMemorySaver()
 )
 
-query = "Run as much of a pentest as you can on 127.0.0.1"
 
+exit_conditions = ["end","quit","exit","stop","done","finished"]
+print(f"Welcome to the Multi-Agentic AI Pentesting Framework. Type your commands to start the pentesting process. Type any of the following to finish: {exit_conditions}")
+query = input("Enter->: ")
+config = {"configurable": {"thread_id": "unique-session-id-123"}}
+while query not in exit_conditions:
 
-for step in supervisor_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+    for step in supervisor_agent.stream(
+        {"messages": [{"role": "user", "content": query}]},config=config):
+        for update in step.values():
+            for message in update.get("messages", []):
+                message.pretty_print()
+
+    query = input("Enter->: ")

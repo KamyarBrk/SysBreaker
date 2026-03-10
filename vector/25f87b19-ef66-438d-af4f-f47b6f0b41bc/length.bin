@@ -1,0 +1,8 @@
+TIMING AND PERFORMANCE: 
+  Options which take <time> are in seconds, or append 'ms' (milliseconds), 
+  's' (seconds), 'm' (minutes), or 'h' (hours) to the value (e.g. 30m, 0.25h). 
+  --delay <time>                   : Adjust delay between probes. 
+  --rate  <rate>                   : Send num packets per second. 
+MISC: 
+  -h, --help                       : Display help information. 
+RP resolution)
