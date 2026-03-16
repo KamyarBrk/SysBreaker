@@ -11,3 +11,5 @@ vectors/*
 
 # But do not ignore the .gitkeep files:
 !vectors/vectors.gitkeep
+
+Official_supervisor_gui.py

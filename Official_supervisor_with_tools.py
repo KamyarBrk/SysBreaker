@@ -1,15 +1,14 @@
 
 import os
 from dotenv import load_dotenv
+
+
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
 from nmap import nmap
 import vulners
 from langchain_ollama.embeddings import OllamaEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 import telnetlib3
 import subprocess
 import requests
@@ -17,37 +16,13 @@ import ftplib
 from pathlib import Path
 from langchain_chroma import Chroma
 from VectorDB_creator import create_vector_db
-import sqlite3
-from langgraph.checkpoint.sqlite import SqliteSaver
-import datetime
-
-current_datetime = datetime.datetime.now()
-
-formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
-
+from langgraph.checkpoint.memory import InMemorySaver 
 load_dotenv(dotenv_path='.env', override=True)
 
 vulners_api = os.getenv("VULNERS_API_KEY")
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 llm = ChatOllama(model='qwen3.5:397b-cloud')
-'''
-choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Claude\n3. ChatGPT\n4. Ollama\nEnter the number corresponding to your choice: ")
-
-if choice == "1":
-
-# Gemini
-    llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
-
-elif choice == "2":
-# Claude
-    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY"))
-elif choice == "3":
-# ChatGPT
-    llm = ChatOpenAI(model="gpt-5.4-2026-03-05", openai_api_key=os.getenv("OPENAI_API_KEY"))
-elif choice == "4":
-    llm = ChatOllama(model='qwen3.5:397b-cloud')
-'''
 
 try:
     current_dir = Path(__file__).parent
@@ -93,38 +68,6 @@ retriever = vectorstore.as_retriever(
     search_type="similarity",
     search_kwargs={"k": 5} 
 )
-
-def list_saved_threads(db_path: str = "memory.db"):
-    """Connects to the LangGraph SQLite DB and prints all unique thread_ids."""
-    
-    try:
-        # 1. Connect to the database
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            
-            # 2. Query for all unique thread IDs in the checkpoints table
-            cursor.execute("SELECT DISTINCT thread_id FROM checkpoints;")
-            threads = cursor.fetchall()
-            
-            # 3. Display the results
-            if not threads:
-                print("The database is empty. No thread_ids found.")
-                return
-                
-            print("\n--- Available Saved Sessions ---")
-            thread_id_lst = []
-            for i, (thread_id,) in enumerate(threads, 1):
-                print(f"{i}. {thread_id}")
-                thread_id_lst.append(f"{thread_id}")
-            print("--------------------------------\n")
-        return thread_id_lst
-    except sqlite3.OperationalError as e:
-        # This triggers if the database file exists, but the LangGraph tables 
-        # haven't been created yet (meaning no memory has ever been saved).
-        if "no such table: checkpoints" in str(e):
-            print("No memory found. The 'checkpoints' table doesn't exist yet.")
-        else:
-            print(f"Database error: {e}")
 
 @tool
 def retriever_tool(query: str) -> str:
@@ -469,31 +412,18 @@ SUPERVISOR_PROMPT = (
     "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
 )
 
-conn = sqlite3.connect(current_dir/"Supervisor_Memory"
-""/"my_agent_memory.db", check_same_thread=False)
-persistent_memory = SqliteSaver(conn)
-
-mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
-
-session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
-
-if session_choice == 0:
-    config = {"configurable": {"thread_id": f"pentest_session: {formatted_datetime}"}}
-else:
-    config = {"configurable": {"thread_id": mem_lst[session_choice-1]}}
-
 supervisor_agent = create_agent(
     llm,
     tools=[recon_node, enum_node, expl_node,post_node,retriever_tool],
     system_prompt=SUPERVISOR_PROMPT,
-    checkpointer=persistent_memory
+    checkpointer=InMemorySaver()
 )
 
 
 exit_conditions = ["end","quit","exit","stop","done","finished"]
 print(f"Welcome to the Multi-Agentic AI Pentesting Framework. Type your commands to start the pentesting process. Type any of the following to finish: {exit_conditions}")
 query = input("Enter->: ")
-
+config = {"configurable": {"thread_id": "unique-session-id-123"}}
 while query not in exit_conditions:
 
     for step in supervisor_agent.stream(

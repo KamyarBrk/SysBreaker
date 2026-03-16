@@ -2,13 +2,15 @@
 import os
 from dotenv import load_dotenv
 
-
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
 from nmap import nmap
 #import vulners
 from langchain_ollama.embeddings import OllamaEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 
 from pathlib import Path
 from langchain_chroma import Chroma
@@ -25,7 +27,25 @@ formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 #vulners_api = os.getenv("VULNERS_API_KEY")
 
+# Ollama
 llm = ChatOllama(model='qwen3.5:397b-cloud')
+'''
+choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Claude\n3. ChatGPT\n4. Ollama\nEnter the number corresponding to your choice: ")
+
+if choice == "1":
+
+# Gemini
+    llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
+
+elif choice == "2":
+# Claude
+    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY"))
+elif choice == "3":
+# ChatGPT
+    llm = ChatOpenAI(model="gpt-5.4-2026-03-05", openai_api_key=os.getenv("OPENAI_API_KEY"))
+elif choice == "4":
+    llm = ChatOllama(model='qwen3.5:397b-cloud')
+'''
 
 try:
     current_dir = Path(__file__).parent
