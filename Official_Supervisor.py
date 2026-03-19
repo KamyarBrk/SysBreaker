@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
+from langsmith import traceable
 from nmap import nmap
 import vulners
 from langchain_ollama.embeddings import OllamaEmbeddings
@@ -29,6 +30,9 @@ load_dotenv(dotenv_path='.env', override=True)
 
 vulners_api = os.getenv("VULNERS_API_KEY")
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+PLAN_FILE = "plan.txt"
+RECON_FILE = 'recon.txt'
 
 llm = ChatOllama(model='qwen3.5:397b-cloud')
 '''
@@ -126,6 +130,7 @@ def list_saved_threads(db_path: str = "memory.db"):
         else:
             print(f"Database error: {e}")
 
+
 @tool
 def retriever_tool(query: str) -> str:
     """
@@ -151,6 +156,7 @@ def retriever_tool(query: str) -> str:
         results.append(chunk_info)
     
     return "\n\n".join(results)
+
 
 @tool
 def host_discovery(cidr_or_host: str) -> str:
@@ -228,6 +234,7 @@ def ftp_probe(target: str) -> str:
 
     return "\n".join(results)
 
+
 @tool
 def port_scanner(ip: str, arguments: str = "-sV") -> str:
     """
@@ -240,7 +247,7 @@ def port_scanner(ip: str, arguments: str = "-sV") -> str:
     nm = nmap.PortScanner()
     return nm.scan(ip, arguments=arguments)
 
-
+'''
 @tool
 def cve_lookup(software: str, version: str) -> str:
     """
@@ -265,8 +272,9 @@ def cve_lookup(software: str, version: str) -> str:
         for r in results[:10]
     ]
     return trimmed
+'''
 
-
+@tool
 def nvd_lookup(service_and_version: str) -> str:
     """
     Queries the NVD (National Vulnerability Database) for CVEs matching
@@ -336,6 +344,7 @@ def nvd_lookup(service_and_version: str) -> str:
 
     return "\n".join(results)
 
+
 @tool
 def commands(command: str) -> str:
     """
@@ -351,7 +360,6 @@ def commands(command: str) -> str:
         shell=True,
         capture_output=True,
         text=True,
-        timeout=30,
     )
     output = []
     if result.stdout:
@@ -361,10 +369,36 @@ def commands(command: str) -> str:
     output.append(f"EXIT CODE: {result.returncode}")
     return "\n".join(output)
 
+
+@tool
+def plan(text: str) -> str:
+    """
+    Used for recording the plan for the penetration test so the user can view what is happening
+
+    Args:
+        text: the text to be entered into the document
+    """
+    path = Path(PLAN_FILE)
+    path.write_text(text)
+    return f'Plan written into {PLAN_FILE}'
+
+@tool
+def recon_findings(text: str) -> str:
+    """
+    Used for recording the result of the reconnaissance
+
+    Args:
+        text: the text to be entered into the document
+    """
+    path = Path(RECON_FILE)
+    path.write_text(text)
+    return f'Plan written into {RECON_FILE}'
+
 Recon_agent_Prompt = (
     "You are an AI model that performs the reconnaissance phase of a penetration test."
         "Use the given tools provided to better complete the reconnaissance tasks."
     "Do not provide security recommendations that is the job of the enumeration agent, your job is exclusively identifying ports"
+    "You should report all of your findings using the 'recon_findings' tool in high detail to the other agents can read it"
 )
 
 recon_agent = create_agent(
@@ -382,7 +416,7 @@ Enum_Agent_Prompt = ("You are an AI model that performs the enumeration phase of
 
 enumeration_agent = create_agent(
     llm,
-    tools=[cve_lookup, nvd_lookup, retriever_tool],
+    tools=[nvd_lookup, retriever_tool],
     system_prompt=Enum_Agent_Prompt
 )
 
@@ -421,6 +455,7 @@ def recon_node(request: str) -> str:
     })
     return result["messages"][-1].text
 
+
 @tool
 def enum_node(request: str) -> str:
     """
@@ -431,7 +466,7 @@ def enum_node(request: str) -> str:
 
     Returns: The current vulnerabilities found if any.
     """
-    result = recon_agent.invoke({
+    result = enumeration_agent.invoke({
         "messages": [{"role": "user", "content": request}]
     })
     return result["messages"][-1].text
@@ -444,12 +479,13 @@ def expl_node(request: str) -> str:
       Args:
           request: The request to run the exploitation agent on.
 
-      Returns: The whether or not it succeeded or not.
+      Returns: Whether it succeeded or not.
       """
-    result = recon_agent.invoke({
+    result = expl_agent.invoke({
         "messages": [{"role": "user", "content": request}]
     })
     return result["messages"][-1].text
+
 
 @tool
 def post_node(request: str) -> str:
@@ -461,12 +497,16 @@ def post_node(request: str) -> str:
 
     Returns: If it succeeded or not.
     """
+    result = post_agent.invoke({
+        "messages": [{"role": "user", "content": request}]
+    })
+    return result["messages"][-1].text
 
 SUPERVISOR_PROMPT = (
     "You are the supervisor of a pentest."
-    "You currently can do a portscan enumerate possible threats exploit vulnerabilities, and post-exploitation tasks."
     "Make the appropriate tool calls and if multiple are needed use multiple tools, each tool needs to be provided with the information of the previous tool if needed."
     "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
+    "Your first step is to develop a detailed plan and use the 'plan' tool to write into a text file for the user to read your exact plan"
 )
 
 conn = sqlite3.connect(current_dir/"Supervisor_Memory"
@@ -484,7 +524,7 @@ else:
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node, expl_node,post_node,retriever_tool],
+    tools=[recon_node, enum_node, expl_node, post_node, plan, retriever_tool],
     system_prompt=SUPERVISOR_PROMPT,
     checkpointer=persistent_memory
 )
