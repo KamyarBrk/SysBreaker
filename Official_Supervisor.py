@@ -544,7 +544,7 @@ if session_delete_choice in ['yes', 'y']:
     my_list = [int(num) for num in delete_thread_id.split()]
     for thread_id in my_list:
         clear_thread_memory(current_dir/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
-
+mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
 session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
 
 if session_choice == 0:
