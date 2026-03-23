@@ -47,7 +47,7 @@ def read_saved_memory(db_path: str = "memory.db"):
 
 
 
-def list_saved_threads(db_path: str = "memory.db"):
+def list_saved_threads(db_path: str = r"C:\Users\George\Documents\CYSE492\CYSE492-Group-22\Supervisor_Memory\my_agent_memory.db"):
     """Connects to the LangGraph SQLite DB and prints all unique thread_ids."""
     
     try:
@@ -65,10 +65,12 @@ def list_saved_threads(db_path: str = "memory.db"):
                 return
                 
             print("\n--- Available Saved Sessions ---")
+            thread_id_lst = []
             for i, (thread_id,) in enumerate(threads, 1):
                 print(f"{i}. {thread_id}")
+                thread_id_lst.append(f"{thread_id}")
             print("--------------------------------\n")
-            
+        return thread_id_lst
     except sqlite3.OperationalError as e:
         # This triggers if the database file exists, but the LangGraph tables 
         # haven't been created yet (meaning no memory has ever been saved).
@@ -78,4 +80,26 @@ def list_saved_threads(db_path: str = "memory.db"):
             print(f"Database error: {e}")
 
 
+
+def clear_thread_memory(db_path: str, thread_id: str):
+    """
+    Deletes all checkpoints and memories for a specific thread_id.
+    Requires langgraph-checkpoint-sqlite v2.0+.
+    """
+    # 1. Connect to the SQLite database
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    
+    try:
+        # 2. Initialize the checkpointer
+        checkpointer = SqliteSaver(conn)
+        
+        # 3. Call the built-in delete method
+        checkpointer.delete_thread(thread_id)
+        
+        print(f"Successfully cleared memory for thread: '{thread_id}'")
+        
+    except AttributeError:
+        print("Error: '.delete_thread()' not found. You might need to update your LangGraph packages, or use Method 2 below.")
+    finally:
+        conn.close()
 
