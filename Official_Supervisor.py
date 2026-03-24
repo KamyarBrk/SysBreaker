@@ -36,25 +36,21 @@ RECON_FILE = 'recon.txt'
 
 llm = ChatOllama(model='qwen3.5:397b-cloud')
 '''
-choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Claude\n3. ChatGPT\n4. Ollama\nEnter the number corresponding to your choice: ")
+choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Ollama\nEnter the number corresponding to your choice: ")
 
 if choice == "1":
 
 # Gemini
     llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
-elif choice == "2":
-# Claude
-    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY"))
-elif choice == "3":
-# ChatGPT
-    llm = ChatOpenAI(model="gpt-5.4-2026-03-05", openai_api_key=os.getenv("OPENAI_API_KEY"))
-elif choice == "4":
+# Ollama
+else:
     llm = ChatOllama(model='qwen3.5:397b-cloud')
+
 '''
 
 try:
-    current_dir = Path(__file__).parent
+    current_dir = Path(__file__).resolve().parent
 except NameError:
     current_dir = Path.cwd()
 #MEMORY_FILE =  current_dir / "recon_memory.json"  # Path to the file used to persist chat memory
@@ -62,7 +58,7 @@ except NameError:
 
 
 
-directory_path = Path(current_dir/"vector")
+directory_path = current_dir/"vector"
 
 # Check if the path exists and is a directory
 if directory_path.is_dir():
@@ -392,29 +388,6 @@ def commands(command: str) -> str:
     return "\n".join(output)
 
 
-@tool
-def plan(text: str) -> str:
-    """
-    Used for recording the plan for the penetration test so the user can view what is happening
-
-    Args:
-        text: the text to be entered into the document
-    """
-    path = Path(PLAN_FILE)
-    path.write_text(text)
-    return f'Plan written into {PLAN_FILE}'
-
-@tool
-def recon_findings(text: str) -> str:
-    """
-    Used for recording the result of the reconnaissance
-
-    Args:
-        text: the text to be entered into the document
-    """
-    path = Path(RECON_FILE)
-    path.write_text(text)
-    return f'Plan written into {RECON_FILE}'
 
 Recon_agent_Prompt = (
     "You are an AI model that performs the reconnaissance phase of a penetration test."
@@ -554,7 +527,7 @@ else:
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node, expl_node, post_node, plan, retriever_tool],
+    tools=[recon_node, enum_node, expl_node, post_node, retriever_tool],
     system_prompt=SUPERVISOR_PROMPT,
     checkpointer=persistent_memory
 )
