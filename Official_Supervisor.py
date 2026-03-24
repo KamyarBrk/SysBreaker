@@ -4,13 +4,9 @@ from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
-from langsmith import traceable
 from nmap import nmap
-import vulners
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 import telnetlib3
 import subprocess
 import requests
@@ -53,9 +49,6 @@ try:
     current_dir = Path(__file__).resolve().parent
 except NameError:
     current_dir = Path.cwd()
-#MEMORY_FILE =  current_dir / "recon_memory.json"  # Path to the file used to persist chat memory
-#MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
-
 
 
 directory_path = current_dir/"vector"
