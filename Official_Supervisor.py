@@ -421,11 +421,13 @@ Recon_agent_Prompt = (
         "Use the given tools provided to better complete the reconnaissance tasks."
     "Do not provide security recommendations that is the job of the enumeration agent, your job is exclusively identifying ports"
     "You should report all of your findings using the 'recon_findings' tool in high detail to the other agents can read it"
+    "You have a set of tools at your disposal, please use the best fitting tool and if it does not exist you have access to the commands tool"
+    "The commands tool gives you access to run any command you want on a kali linux system, when you are asked to do recon you need to do a full report"
 )
 
 recon_agent = create_agent(
     llm,
-    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, retriever_tool],
+    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, commands, retriever_tool],
     system_prompt=Recon_agent_Prompt,
 )
 
