@@ -13,3 +13,5 @@ vectors/*
 !vectors/vectors.gitkeep
 
 Official_supervisor_gui.py
+
+testgem.py
