@@ -60,15 +60,18 @@ except NameError:
 directory_path = current_dir/"vector"
 
 # Check if the path exists and is a directory
-if directory_path.is_dir():
-    print("The VectorDB directory exists. Would you like to create a new vector database? This will overwrite the existing one. (yes/no)")
-    user_input = input("Enter->: ").strip().lower()
-    if user_input in ['yes', 'y']:  
-        create_vector_db()       
+try:
+    if directory_path.is_dir():
+        print("The VectorDB directory exists. Would you like to create a new vector database? This will overwrite the existing one. (yes/no)")
+        user_input = input("Enter->: ").strip().lower()
+        if user_input in ['yes', 'y']:  
+            create_vector_db()       
 
-else:
-    print("The VectorDB directory does not exist. A new vector database will be created.")
-    create_vector_db()
+    else:
+        print("The VectorDB directory does not exist. A new vector database will be created.")
+        create_vector_db()
+except Exception as e:
+    print(f"An error occurred while checking the VectorDB directory/Creation: {e}")
 
 embeddings = OllamaEmbeddings(
     model="nomic-embed-text" 
@@ -354,13 +357,19 @@ persistent_memory = SqliteSaver(conn)
 
 mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
 
-session_delete_choice = input("Would you like to delete any previous memory threads? (yes/no): ").strip().lower()
 
-if session_delete_choice in ['yes', 'y']:
-    delete_thread_id = input("Enter the thread ID to delete, enter a list of Thread IDs to remove multiple of them: ").strip()
-    my_list = [int(num) for num in delete_thread_id.split()]
-    for thread_id in my_list:
-        clear_thread_memory(current_dir/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
+try:
+    session_delete_choice = input("Would you like to delete any previous memory threads? (yes/no): ").strip().lower()
+
+    if session_delete_choice in ['yes', 'y']:
+        delete_thread_id = input("Enter the thread ID to delete, enter a list of Thread IDs to remove multiple of them: ").strip()
+        my_list = [int(num) for num in delete_thread_id.split()]
+        for thread_id in my_list:
+            clear_thread_memory(current_dir/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
+except Exception as e:
+    print(f"An error occurred while trying to delete memory threads: {e}")
+
+
 mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
 session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
 
