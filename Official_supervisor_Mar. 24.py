@@ -1,17 +1,16 @@
 
 import os
 from dotenv import load_dotenv
-
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
 from nmap import nmap
-#import vulners
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
-
+import telnetlib3
+import subprocess
+import requests
+import ftplib
 from pathlib import Path
 from langchain_chroma import Chroma
 from VectorDB_creator import create_vector_db
@@ -23,40 +22,36 @@ current_datetime = datetime.datetime.now()
 
 formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
-#load_dotenv(dotenv_path='.env', override=True)
+load_dotenv(dotenv_path='.env', override=True)
 
-#vulners_api = os.getenv("VULNERS_API_KEY")
+vulners_api = os.getenv("VULNERS_API_KEY")
+NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
-# Ollama
+PLAN_FILE = "plan.txt"
+RECON_FILE = 'recon.txt'
+
 llm = ChatOllama(model='qwen3.5:397b-cloud')
 '''
-choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Claude\n3. ChatGPT\n4. Ollama\nEnter the number corresponding to your choice: ")
+choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Ollama\nEnter the number corresponding to your choice: ")
 
 if choice == "1":
 
 # Gemini
     llm = ChatGoogleGenerativeAI(model="gemini-3.1-pro-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
-elif choice == "2":
-# Claude
-    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=os.getenv("ANTHROPIC_API_KEY"))
-elif choice == "3":
-# ChatGPT
-    llm = ChatOpenAI(model="gpt-5.4-2026-03-05", openai_api_key=os.getenv("OPENAI_API_KEY"))
-elif choice == "4":
+# Ollama
+else:
     llm = ChatOllama(model='qwen3.5:397b-cloud')
+
 '''
 
 try:
-    current_dir = Path(__file__).parent
+    current_dir = Path(__file__).resolve().parent
 except NameError:
     current_dir = Path.cwd()
-#MEMORY_FILE =  current_dir / "recon_memory.json"  # Path to the file used to persist chat memory
-#MAX_MEMORY_MESSAGES = 200  # Maximum number of past messages to keep to prevent file bloat
 
 
-
-directory_path = Path(current_dir/"vector")
+directory_path = current_dir/"vector"
 
 # Check if the path exists and is a directory
 if directory_path.is_dir():
@@ -92,7 +87,7 @@ retriever = vectorstore.as_retriever(
     search_kwargs={"k": 5} 
 )
 
-def list_saved_threads(db_path: str = "memory.db"):
+def list_saved_threads(db_path: str) -> list:
     """Connects to the LangGraph SQLite DB and prints all unique thread_ids."""
     
     try:
@@ -125,6 +120,28 @@ def list_saved_threads(db_path: str = "memory.db"):
             print(f"Database error: {e}")
 
 
+def clear_thread_memory(db_path: str, thread_id: str) -> None:
+    """
+    Deletes all checkpoints and memories for a specific thread_id.
+    Requires langgraph-checkpoint-sqlite v2.0+.
+    """
+    # 1. Connect to the SQLite database
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    
+    try:
+        # 2. Initialize the checkpointer
+        checkpointer = SqliteSaver(conn)
+        
+        # 3. Call the built-in delete method
+        checkpointer.delete_thread(thread_id)
+        
+        print(f"Successfully cleared memory for thread: '{thread_id}'")
+        
+    except AttributeError:
+        print("Error: '.delete_thread()' not found. You might need to update your LangGraph packages, or use Method 2 below.")
+    finally:
+        conn.close()
+
 @tool
 def retriever_tool(query: str) -> str:
     """
@@ -150,6 +167,83 @@ def retriever_tool(query: str) -> str:
         results.append(chunk_info)
     
     return "\n\n".join(results)
+
+
+@tool
+def host_discovery(cidr_or_host: str) -> str:
+    """
+    Performs a ping sweep / ARP scan to discover live hosts on a network.
+    Use this first when given a subnet (CIDR notation) to find active targets.
+
+    Args:
+        cidr_or_host: IP address, hostname, or CIDR range (e.g., "192.168.1.0/24").
+    """
+    nm = nmap.PortScanner()
+    nm.scan(hosts=cidr_or_host, arguments="-sn -T4 --open")
+    live = []
+    for host in nm.all_hosts():
+        state = nm[host].state()
+        hostname = nm[host].hostname() or "N/A"
+        if state == "up":
+            live.append(f"  {host:18s} ({hostname})")
+    if live:
+        return f"Live hosts on {cidr_or_host}:\n" + "\n".join(live)
+    return f"No live hosts found on {cidr_or_host}."
+
+
+@tool
+def telnet_probe(target: str) -> str:
+    """
+    Probes Telnet (port 23) to check if the service is active and grabs the banner.
+
+    Args:
+        target: IP address or hostname.
+    """
+    tn = telnetlib3.Telnet(target, 23, timeout=6)
+    banner = tn.read_until(b"login:", timeout=4).decode(errors="replace").strip()
+    tn.close()
+    if banner:
+        return f"[+] TELNET OPEN — Banner:\n{banner}"
+    return "[+] Telnet port open (no banner received)"
+
+
+@tool
+def ftp_probe(target: str) -> str:
+    """
+    Probes FTP (port 21) for anonymous login, server version, and directory listing.
+
+    Args:
+        target: IP address or hostname.
+    """
+    results = []
+    try:
+        ftp = ftplib.FTP(timeout=8)
+        banner = ftp.connect(target, 21)
+        results.append(f"FTP Banner: {banner.strip()}")
+
+        # Anonymous login
+        try:
+            ftp.login("anonymous", "anonymous@example.com")
+            results.append("[+] ANONYMOUS LOGIN SUCCESSFUL")
+            results.append(f"Welcome: {ftp.getwelcome()}")
+
+            # List root
+            files = []
+            ftp.retrlines("LIST", files.append)
+            results.append("Root directory contents:")
+            for f in files[:15]:
+                results.append(f"  {f}")
+            if len(files) > 15:
+                results.append(f"  ... and {len(files) - 15} more")
+
+            ftp.quit()
+        except ftplib.error_perm:
+            results.append("[-] Anonymous login denied (credentials required)")
+
+    except ConnectionRefusedError:
+        return "FTP port 21 is closed or filtered."
+
+    return "\n".join(results)
 
 
 @tool
@@ -191,15 +285,113 @@ def cve_lookup(software: str, version: str) -> str:
     return trimmed
 '''
 
+@tool
+def nvd_lookup(service_and_version: str) -> str:
+    """
+    Queries the NVD (National Vulnerability Database) for CVEs matching
+    a given service name and optional version string.
+
+    Args:
+        service_and_version: Service and version to search for.
+    """
+    parts = service_and_version.strip().split(" ", 1)
+    service = parts[0]
+    version = parts[1] if len(parts) > 1 else ""
+
+    keyword = f"{service} {version}".strip()
+
+    params = {
+        "keywordSearch": keyword,
+        "resultsPerPage": 10,
+        "startIndex": 0,
+    }
+
+    response = requests.get(NVD_API, params=params, timeout=10)
+    response.raise_for_status()
+    data = response.json()
+
+    total = data.get("totalResults", 0)
+    vulns = data.get("vulnerabilities", [])
+
+    if not vulns:
+        return f"No CVEs found for '{keyword}'."
+
+    results = [f"CVEs for '{keyword}' ({total} total, showing top {len(vulns)}):"]
+    results.append("=" * 60)
+
+    for item in vulns:
+        cve = item.get("cve", {})
+        cve_id = cve.get("id", "N/A")
+
+        # Description
+        descs = cve.get("descriptions", [])
+        description = next(
+            (d["value"] for d in descs if d.get("lang") == "en"),
+            "No description available."
+        )
+
+        # CVSS score
+        score = "N/A"
+        severity = "N/A"
+        metrics = cve.get("metrics", {})
+        for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+            if key in metrics and metrics[key]:
+                cvss_data = metrics[key][0].get("cvssData", {})
+                score = cvss_data.get("baseScore", "N/A")
+                severity = cvss_data.get("baseSeverity", metrics[key][0].get("baseSeverity", "N/A"))
+                break
+
+        # Published date
+        published = cve.get("published", "N/A")[:10]
+
+        # References
+        refs = cve.get("references", [])
+        ref_urls = [r["url"] for r in refs[:2]]
+
+        results.append(f"\n[{cve_id}]  Score: {score} ({severity})  Published: {published}")
+        results.append(f"  {description[:200]}{'...' if len(description) > 200 else ''}")
+        if ref_urls:
+            results.append(f"  Refs: {' | '.join(ref_urls)}")
+
+    return "\n".join(results)
+
+
+@tool
+def commands(command: str) -> str:
+    """
+    Executes a shell command on the local system and returns
+    the stdout, stderr, and exit code.
+
+    Args:
+        command: The shell command to execute.
+    """
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+    )
+    output = []
+    if result.stdout:
+        output.append(f"STDOUT:\n{result.stdout.strip()}")
+    if result.stderr:
+        output.append(f"STDERR:\n{result.stderr.strip()}")
+    output.append(f"EXIT CODE: {result.returncode}")
+    return "\n".join(output)
+
+
+
 Recon_agent_Prompt = (
     "You are an AI model that performs the reconnaissance phase of a penetration test."
         "Use the given tools provided to better complete the reconnaissance tasks."
     "Do not provide security recommendations that is the job of the enumeration agent, your job is exclusively identifying ports"
+    "You should report all of your findings using the 'recon_findings' tool in high detail to the other agents can read it"
 )
 
 recon_agent = create_agent(
     llm,
-    tools=[port_scanner,retriever_tool],
+    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, retriever_tool],
     system_prompt=Recon_agent_Prompt,
 )
 
@@ -212,7 +404,7 @@ Enum_Agent_Prompt = ("You are an AI model that performs the enumeration phase of
 
 enumeration_agent = create_agent(
     llm,
-    tools=[retriever_tool],
+    tools=[nvd_lookup, retriever_tool],
     system_prompt=Enum_Agent_Prompt
 )
 
@@ -222,7 +414,7 @@ Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in t
                      "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
 expl_agent = create_agent(
     llm,
-    tools=[retriever_tool]
+    tools=[commands, retriever_tool]
     , system_prompt=Expl_Agent_Prompt
 )
 
@@ -231,7 +423,7 @@ Post_Agent_Prompt = ("You have the role of post-exploitation in the pentesting p
                      "If there is no exploits found you have no job to do and should not do any jobs")
 post_agent = create_agent(
     llm,
-    tools=[retriever_tool],
+    tools=[commands, retriever_tool],
     system_prompt= Post_Agent_Prompt
 )
 
@@ -251,6 +443,7 @@ def recon_node(request: str) -> str:
     })
     return result["messages"][-1].text
 
+
 @tool
 def enum_node(request: str) -> str:
     """
@@ -261,7 +454,7 @@ def enum_node(request: str) -> str:
 
     Returns: The current vulnerabilities found if any.
     """
-    result = recon_agent.invoke({
+    result = enumeration_agent.invoke({
         "messages": [{"role": "user", "content": request}]
     })
     return result["messages"][-1].text
@@ -274,12 +467,13 @@ def expl_node(request: str) -> str:
       Args:
           request: The request to run the exploitation agent on.
 
-      Returns: The whether or not it succeeded or not.
+      Returns: Whether it succeeded or not.
       """
-    result = recon_agent.invoke({
+    result = expl_agent.invoke({
         "messages": [{"role": "user", "content": request}]
     })
     return result["messages"][-1].text
+
 
 @tool
 def post_node(request: str) -> str:
@@ -291,14 +485,17 @@ def post_node(request: str) -> str:
 
     Returns: If it succeeded or not.
     """
+    result = post_agent.invoke({
+        "messages": [{"role": "user", "content": request}]
+    })
+    return result["messages"][-1].text
 
 SUPERVISOR_PROMPT = (
     "You are the supervisor of a pentest."
-    "You currently can do a portscan enumerate possible threats exploit vulnerabilities, and post-exploitation tasks."
     "Make the appropriate tool calls and if multiple are needed use multiple tools, each tool needs to be provided with the information of the previous tool if needed."
     "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
+    "Your first step is to develop a detailed plan and use the 'plan' tool to write into a text file for the user to read your exact plan"
 )
-
 
 conn = sqlite3.connect(current_dir/"Supervisor_Memory"
 ""/"my_agent_memory.db", check_same_thread=False)
@@ -306,6 +503,14 @@ persistent_memory = SqliteSaver(conn)
 
 mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
 
+session_delete_choice = input("Would you like to delete any previous memory threads? (yes/no): ").strip().lower()
+
+if session_delete_choice in ['yes', 'y']:
+    delete_thread_id = input("Enter the thread ID to delete, enter a list of Thread IDs to remove multiple of them: ").strip()
+    my_list = [int(num) for num in delete_thread_id.split()]
+    for thread_id in my_list:
+        clear_thread_memory(current_dir/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
+mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
 session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
 
 if session_choice == 0:
@@ -315,7 +520,7 @@ else:
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node, expl_node,post_node,retriever_tool],
+    tools=[recon_node, enum_node, expl_node, post_node, retriever_tool],
     system_prompt=SUPERVISOR_PROMPT,
     checkpointer=persistent_memory
 )
