@@ -11,6 +11,10 @@ import telnetlib3
 import subprocess
 import requests
 import ftplib
+import httpx
+import dns.resolver
+import ssl
+import socket
 from pathlib import Path
 from langchain_chroma import Chroma
 from VectorDB_creator import create_vector_db
@@ -168,6 +172,64 @@ def retriever_tool(query: str) -> str:
     
     return "\n\n".join(results)
 
+@tool
+def probe_http(url: str) -> str:
+    """
+    Sends an HTTP GET request to the target URL and returns the status code,
+    response headers, and a snippet of the response body. Useful for checking
+    if a URL is live and identifying server information.
+
+    Args:
+        url: url of the website to probe
+    """
+    with httpx.Client(follow_redirects=True, timeout=10) as client:
+        r = client.get(url)
+        snippet = r.text[:500].strip()
+        return (
+            f"Status: {r.status_code}\n"
+            f"Headers: {dict(r.headers)}\n"
+            f"Body snippet:\n{snippet}"
+        )
+
+@tool
+def dns_lookup(domain: str) -> str:
+    """
+    Performs DNS lookups for A, MX, TXT, CNAME, and NS records on the given
+    domain. Useful for mapping infrastructure and finding related services.
+
+    Args:
+        domain: Domain for the DNS lookup
+    """
+    record_types = ["A", "MX", "TXT", "CNAME", "NS"]
+    results = {}
+    for rtype in record_types:
+        answers = dns.resolver.resolve(domain, rtype)
+        results[rtype] = [str(r) for r in answers]
+    return "\n".join(f"{k}: {v}" for k, v in results.items())
+
+@tool
+def get_tls_info(hostname: str) -> str:
+    """
+    Connects to the host on port 443 and retrieves TLS certificate details
+    including subject, issuer, expiry date, and SANs (Subject Alternative Names).
+    """
+
+    ctx = ssl.create_default_context()
+    with ctx.wrap_socket(
+        socket.create_connection((hostname, 443), timeout=10),
+        server_hostname=hostname,
+    ) as sock:
+        cert = sock.getpeercert()
+    subject = dict(x[0] for x in cert.get("subject", []))
+    issuer = dict(x[0] for x in cert.get("issuer", []))
+    sans = [v for k, v in cert.get("subjectAltName", [])]
+    return (
+        f"Subject: {subject}\n"
+        f"Issuer: {issuer}\n"
+        f"Valid from: {cert.get('notBefore')}\n"
+        f"Valid until: {cert.get('notAfter')}\n"
+        f"SANs: {sans}"
+        )
 
 @tool
 def host_discovery(cidr_or_host: str) -> str:
