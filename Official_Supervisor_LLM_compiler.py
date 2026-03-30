@@ -1,6 +1,7 @@
 
 import os
 from dotenv import load_dotenv
+from langchain import tools
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
 from langchain.agents import create_agent
@@ -21,18 +22,27 @@ from VectorDB_creator import create_vector_db
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 import datetime
-
+from langgraph.errors import GraphRecursionError
 from Tools.Recon_tools import *
 from Tools.Enum_tools import * 
 from Tools.Exp_tools import *
 from Tools.Post_exp_tools import * 
+from langchain_core.messages import HumanMessage, AIMessage
+from LLM_compiler import *
 
 current_datetime = datetime.datetime.now()
 
 formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 
-llm = ChatOllama(model='qwen3.5:397b-cloud')
+
+
+
+#PLAN_FILE = "plan.txt"
+#RECON_FILE = 'recon.txt'
+
+llm = ChatOllama(model='qwen3.5:397b-cloud',temperature=0).bind(format="json")
+
 '''
 choice = input("Choose one of the following LLMs:\n1. Gemini\n2. Ollama\nEnter the number corresponding to your choice: ")
 
@@ -73,7 +83,7 @@ embeddings = OllamaEmbeddings(
     model="nomic-embed-text" 
 )
 
-
+#persist_directory = r"./vector" 
 persist_directory = current_dir/"vector"
 collection_name = "vector_storage" 
 
@@ -173,7 +183,6 @@ def retriever_tool(query: str) -> str:
     
     return "\n\n".join(results)
 
-
 @tool
 def reporter(report: str) -> None:
     """
@@ -190,22 +199,6 @@ def reporter(report: str) -> None:
     with open(current_dir/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
 
-
-@tool
-def planner(report: str) -> None:
-    """
-    The Planner tool writes the provided text content to a new, uniquely timestamped file in the current directory.
-
-    Use this function to persistently save pentest planning information. 
-    It automatically constructs a filename using the current date and time 
-    (e.g., 'report_YYYY-MM-DD_HH-MM-SS.txt') to ensure no existing files are overwritten.
-
-    Args:
-        report (str): The text content to be written to the file.
-    """
-    filename = f"Plan_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    with open(current_dir/f'{filename}', 'w', encoding='utf-8') as f:
-        f.write(report)
 
 
 '''
@@ -374,11 +367,13 @@ def post_node(request: str) -> str:
     })
     return result["messages"][-1].text
 
+
+
 SUPERVISOR_PROMPT = (
     "You are the supervisor of a pentest."
     "Make the appropriate tool calls and if multiple are needed use multiple tools, each tool needs to be provided with the information of the previous tool if needed."
     "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
-    "Your first step is to develop a detailed plan and use the 'planner' tool to write into a text file for the user to read your exact plan"
+    "Your first step is to develop a detailed plan and use the 'plan' tool to write into a text file for the user to read your exact plan."
 )
 
 conn = sqlite3.connect(current_dir/"Supervisor_Memory"
@@ -399,10 +394,14 @@ try:
 except Exception as e:
     print(f"An error occurred while trying to delete memory threads: {e}")
 
+try:
+    mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
+    session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
+except Exception as e:
+    session_choice = 0
+    print(f"An error occurred while trying to select a memory thread a new session will be started: {e}")
 
-mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
-session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
-
+    
 if session_choice == 0:
     config = {"configurable": {"thread_id": f"pentest_session: {formatted_datetime}"}}
 else:
@@ -410,11 +409,235 @@ else:
 
 supervisor_agent = create_agent(
     llm,
-    tools=[recon_node, enum_node, expl_node, post_node, retriever_tool, planner, reporter],
+    tools=[recon_node, enum_node, expl_node, post_node, retriever_tool,reporter],
     system_prompt=SUPERVISOR_PROMPT,
     checkpointer=persistent_memory
 )
 
+# Plan execute begins
+
+def supervisor_node(state: CompilerState) -> dict:
+    query = state["input"]
+    response = supervisor_agent.invoke({
+        "messages": [{"role": "user", "content": query}]
+    })
+    return {"plan": response["messages"][-1].text}
+
+tools = [recon_node, enum_node, expl_node, post_node,retriever_tool,reporter]
+tool_map = {t.name: t for t in tools}
+
+def extract_json_from_llm(text: str) -> str:
+    """Removes markdown code blocks around JSON returned by the LLM."""
+    # Strip whitespace
+    text = text.strip()
+
+    text = re.sub(r"\s*```$", "", text)
+    return text
+
+# ==========================================
+# 4. The Planner Node 
+# ==========================================
+def planner_node(state: CompilerState) -> dict:
+    query = state["input"]
+    tool_desc = "\n".join([f"- {t.name}: {t.description}" for t in tools])
+    
+    # --- NEW: Extract history and feedback ---
+    # We use the accumulated results as the history of what was tried
+    history_str = json.dumps(state.get("results", {}), indent=2)
+    # If it's the first run, there won't be feedback yet
+    feedback = state.get("feedback", "No previous feedback. This is the first iteration.")
+    
+    # --- UPDATE: Add history and feedback to the format call ---
+    prompt = PLANNER_PROMPT.format(
+        tool_descriptions=tool_desc, 
+        query=query,
+        history=history_str,
+        feedback=feedback
+    )
+    
+    response = llm.invoke([HumanMessage(content=prompt)])
+    
+    try:
+        clean_text = extract_json_from_llm(response.content)
+        plan = json.loads(clean_text)
+        if isinstance(plan, dict):
+            plan = plan.get("plan", plan.get("tasks", []))
+        if not isinstance(plan, list):
+            print(f"⚠️ Warning: Expected plan to be a list, got {type(plan).__name__}. Defaulting to empty plan.")
+            plan = []
+    except json.JSONDecodeError:
+        print("⚠️ Warning: Planner failed to output valid JSON. Defaulting to empty plan.")
+        plan = [] 
+        
+    return {"plan": plan}
+
+
+# ==========================================
+# 5. The Executor Node (Task Fetching Unit)
+# ==========================================
+def execute_node(state: CompilerState):
+    plan = state.get("plan", [])
+    # We make a copy of results so we don't accidentally mutate state directly
+    results = dict(state.get("results", {}))
+    
+    # Iterate through the DAG plan
+    for task in plan:
+        # Guard clause: Ensure the task is actually a dictionary before calling .get()
+        if not isinstance(task, dict):
+            print(f"⚠️ Warning: Invalid task format (expected dict, got {type(task).__name__}). Skipping: {task}")
+            continue
+            
+        task_id = str(task.get("id", "unknown"))
+        
+        # Skip if already executed in a previous loop
+        if task_id in results:
+            continue
+            
+        tool_name = task.get("tool")
+        args = task.get("args", {})
+        
+        resolved_args = {}
+        
+        # Guard clause: Ensure args is a dictionary before iterating
+        if isinstance(args, dict):
+            # Resolve Dependencies (Variable Substitution)
+            for key, val in args.items():
+                if isinstance(val, str) and val.startswith("$"):
+                    dep_id = val[1:]  # Extract ID (e.g., "$1" -> "1")
+                    # Substitute the previous tool's output into this argument
+                    resolved_args[key] = results.get(dep_id, val)
+                else:
+                    resolved_args[key] = val
+        else:
+            # If the LLM generated a string/list instead of a dict, pass it as is
+            resolved_args = args
+                
+        # Execute the Tool
+        if tool_name in tool_map:
+            print(f"⚙️ Executing Task {task_id}: {tool_name} with args: {resolved_args}")
+            try:
+                tool_output = tool_map[tool_name].invoke(resolved_args)
+                # Cast to string to ensure json.dumps() in joiner_node won't crash
+                results[task_id] = str(tool_output)
+            except Exception as e:
+                results[task_id] = f"Error executing {tool_name}: {str(e)}"
+        else:
+            results[task_id] = f"Error: Tool '{tool_name}' not found."
+            
+    return {"results": results}
+
+# ==========================================
+# 6. The Joiner Node 
+# ==========================================
+def joiner_node(state: CompilerState) -> dict:
+    query = state["input"]
+    results_str = json.dumps(state.get("results", {}), indent=2)
+    
+    # --- NEW: Setup Iteration Tracking ---
+    current_iteration = state.get("iteration", 1)
+    MAX_ITERATIONS = 5 # You can adjust this limit
+    
+    # --- UPDATE: Add current_iteration and max_iterations to format ---
+    prompt = JOINER_PROMPT.format(
+        query=query, 
+        results=results_str,
+        current_iteration=current_iteration,
+        max_iterations=MAX_ITERATIONS
+    )
+    
+    response = llm.invoke([HumanMessage(content=prompt)])
+    
+    try:
+        clean_text = extract_json_from_llm(response.content)
+        decision = json.loads(clean_text)
+    except json.JSONDecodeError:
+        decision = {"action": "finish", "answer": response.content}
+        
+    if not isinstance(decision, dict):
+        decision = {"action": "finish", "answer": str(decision)}
+        
+    if decision.get("action") == "finish":
+        return {"final_answer": decision.get("answer")}
+    
+        # --- UPDATE: Pass feedback and increment iteration on replan ---
+    reason = decision.get("reason", "No specific reason provided.")
+    print(f"🔄 Replanning triggered (Iteration {current_iteration}/{MAX_ITERATIONS}). Reason: {reason}")
+        
+    return {
+        "plan": [], 
+        "iteration": current_iteration + 1, 
+        "feedback": reason
+    }
+
+# ==========================================
+# 7. Condition Function 
+# ==========================================
+def should_continue(state: CompilerState):
+    if state.get("final_answer"):
+        return "end"
+    return "planner"
+
+
+workflow = StateGraph(CompilerState)
+
+workflow.add_node("planner", planner_node)
+workflow.add_node("supervisor", supervisor_node)
+workflow.add_node("joiner", joiner_node)
+
+workflow.set_entry_point("planner")
+
+workflow.add_edge("planner", "supervisor")
+workflow.add_edge("supervisor", "joiner")
+workflow.add_conditional_edges(
+    "joiner",
+    should_continue,
+    {
+        "end": END,
+        "planner": "planner"
+    }
+)
+
+planner_app = workflow.compile()
+
+# Plan ends 
+
+'''
+@tool
+def complex_attack_planner(objective: str) -> str:
+    """
+    Use this tool to plan complex, multi-step penetration testing attacks 
+    that require planning, dependency injection, and chained tool execution.
+    Input should be the specific security objective or attack path to investigate.
+    """
+    print(f"\n[Supervisor] 🚨 Delegating heavy-lifting to complex_attack_planner...")
+    print(f"[Supervisor] Objective: {objective}\n")
+    
+    inputs = {"input": objective, "plan": [], "results": {}}
+    
+    try:
+        # UPGRADE 1: Set a strict recursion limit to prevent infinite replanning loops
+        config = {"recursion_limit": 10} 
+        
+        # Run the nested graph
+        final_state = planner_app.invoke(inputs, config=config)
+        
+        # UPGRADE 2: Extract the plan to show the supervisor *how* we got the answer
+        executed_plan = final_state.get("plan", [])
+        plan_summary = ", ".join([task.get("tool", "unknown") for task in executed_plan])
+        
+        final_answer = final_state.get("final_answer", "No definitive conclusion reached.")
+        
+        print(f"\n[Supervisor] 🏁 Attack planner completed its execution.")
+        
+        # Return a richer context to the supervisor
+        return f"Execution Path Used: [{plan_summary}]\n\nFinal Report: {final_answer}"
+
+    except GraphRecursionError:
+        return "Error: The attack planner got stuck in an infinite loop and was terminated to save resources."
+    except Exception as e:
+        return f"Error: The complex attack planner encountered a critical failure: {str(e)}"
+    '''
+# Planning end 
 
 exit_conditions = ["end","quit","exit","stop","done","finished"]
 print(f"Welcome to the Multi-Agentic AI Pentesting Framework. Type your commands to start the pentesting process. Type any of the following to finish: {exit_conditions}")
@@ -422,9 +645,11 @@ query = input("Enter->: ")
 
 while query not in exit_conditions:
 
-    for step in supervisor_agent.stream(
-        {"messages": [{"role": "user", "content": query}]},config=config):
+    for step in planner_app.stream(
+        {"input": query},config=config):
         for update in step.values():
+            if type(update) == type(None):
+                update = {"messages": [AIMessage(content="No response from LLM.")]}
             for message in update.get("messages", []):
                 message.pretty_print()
 
