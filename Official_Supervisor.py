@@ -287,7 +287,10 @@ recon_agent = create_agent(
 Enum_Agent_Prompt = ("You are an AI model that performs the enumeration phase of a penetration test. "
                      "If there is no vulnerability found tell the user there is no vulnerability found for now"
                      "You are to only find the vulnerabilities using the cve_lookup tool"
-                     "Your only job is to enumerate the information given to you nothing else, you should always respond to the supervisor whether a vulnerability was found or not")
+                     "Your only job is to enumerate the information given to you nothing else "
+                     "You should always respond to the supervisor whether a vulnerability was found or not"
+                     "If you cannot find a vulnerability in the NVD then use what information you do have the enumerate possible threats"
+                     )
 
 enumeration_agent = create_agent(
     llm,
@@ -383,6 +386,9 @@ SUPERVISOR_PROMPT = (
     "Make the appropriate tool calls and if multiple are needed use multiple tools, each tool needs to be provided with the information of the previous tool if needed."
     "If no vulnerabilities are found then you can end the task and do not need to continue further, only call exploitation and post-exploitation if there is a need to"
     "Your first step is to develop a detailed plan and use the 'planner' tool to write into a text file for the user to read your exact plan"
+    "You are to run the penetration test only on the hosts given, if given a port only test that port, if given an IP range only test that range etc"
+    "ALL INFORMATION FROM ONE PHASE MUST BE PASSED TO THE OTHER DO NOT LEAVE OUT ANY DETAIL OR IF  YOU CAN ELABORATE ON THE INFORMATION THEN ELABORATE"
+    "All information needs to be as detailed as possible"
 )
 
 conn = sqlite3.connect(current_dir/"Supervisor_Memory"
