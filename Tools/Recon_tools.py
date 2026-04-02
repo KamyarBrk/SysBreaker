@@ -43,8 +43,8 @@ def telnet_probe(target: str) -> str:
     banner = tn.read_until(b"login:", timeout=4).decode(errors="replace").strip()
     tn.close()
     if banner:
-        return f"[+] TELNET OPEN — Banner:\n{banner}"
-    return "[+] Telnet port open (no banner received)"
+        return f"TELNET OPEN — Banner:\n{banner}"
+    return "Telnet port open (no banner received)"
 
 
 
@@ -110,14 +110,18 @@ def probe_http(url: str) -> str:
     Args:
         url: url of the website to probe
     """
-    with httpx.Client(follow_redirects=True, timeout=10) as client:
-        r = client.get(url)
-        snippet = r.text[:500].strip()
-        return (
-            f"Status: {r.status_code}\n"
-            f"Headers: {dict(r.headers)}\n"
-            f"Body snippet:\n{snippet}"
-        )
+    try:
+        with httpx.Client(follow_redirects=True, timeout=10) as client:
+            r = client.get(url)
+            snippet = r.text[:500].strip()
+            return (
+                f"Status: {r.status_code}\n"
+                f"Headers: {dict(r.headers)}\n"
+                f"Body snippet:\n{snippet}"
+            )
+    except Exception as e:
+        return(f'Error: {e}')
+
 
 @tool
 def dns_lookup(domain: str) -> str:
@@ -141,20 +145,22 @@ def get_tls_info(hostname: str) -> str:
     Connects to the host on port 443 and retrieves TLS certificate details
     including subject, issuer, expiry date, and SANs (Subject Alternative Names).
     """
-    ctx = ssl.create_default_context()
-    with ctx.wrap_socket(
-        socket.create_connection((hostname, 443), timeout=10),
-        server_hostname=hostname,
-    ) as sock:
-        cert = sock.getpeercert()
-    subject = dict(x[0] for x in cert.get("subject", []))
-    issuer = dict(x[0] for x in cert.get("issuer", []))
-    sans = [v for k, v in cert.get("subjectAltName", [])]
-    return (
-        f"Subject: {subject}\n"
-        f"Issuer: {issuer}\n"
-        f"Valid from: {cert.get('notBefore')}\n"
-        f"Valid until: {cert.get('notAfter')}\n"
-        f"SANs: {sans}"
-        )
-
+    try:
+        ctx = ssl.create_default_context()
+        with ctx.wrap_socket(
+            socket.create_connection((hostname, 443), timeout=10),
+            server_hostname=hostname,
+        ) as sock:
+            cert = sock.getpeercert()
+        subject = dict(x[0] for x in cert.get("subject", []))
+        issuer = dict(x[0] for x in cert.get("issuer", []))
+        sans = [v for k, v in cert.get("subjectAltName", [])]
+        return (
+            f"Subject: {subject}\n"
+            f"Issuer: {issuer}\n"
+            f"Valid from: {cert.get('notBefore')}\n"
+            f"Valid until: {cert.get('notAfter')}\n"
+            f"SANs: {sans}"
+            )
+    except Exception as e:
+        return(f'Error: {e}')

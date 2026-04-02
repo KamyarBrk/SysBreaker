@@ -21,6 +21,7 @@ from VectorDB_creator import create_vector_db
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 import datetime
+import logging
 
 from Tools.Recon_tools import *
 from Tools.Enum_tools import * 
@@ -30,6 +31,8 @@ from Tools.Post_exp_tools import *
 current_datetime = datetime.datetime.now()
 
 formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
+
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 llm = ChatOllama(model='qwen3.5:397b-cloud')
@@ -175,7 +178,7 @@ def retriever_tool(query: str) -> str:
 
 
 @tool
-def reporter(report: str) -> None:
+def reporter(report: str) -> str:
     """
     Writes the provided text content to a new, uniquely timestamped file in the current directory.
 
@@ -187,12 +190,12 @@ def reporter(report: str) -> None:
         report (str): The text content to be written to the file.
     """
     filename = f"report_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    with open(current_dir/f'{filename}', 'w', encoding='utf-8') as f:
+    with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
-
+    return f'Success: Report written to ./tmp/{filename}'
 
 @tool
-def planner(report: str) -> None:
+def planner(report: str) -> str:
     """
     The Planner tool writes the provided text content to a new, uniquely timestamped file in the current directory.
 
@@ -204,9 +207,9 @@ def planner(report: str) -> None:
         report (str): The text content to be written to the file.
     """
     filename = f"Plan_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    with open(current_dir/f'{filename}', 'w', encoding='utf-8') as f:
+    with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
-
+    return f'Success: Plan written to ./tmp/{filename}'
 
 '''
 @tool
@@ -275,7 +278,7 @@ Recon_agent_Prompt = (
 
 recon_agent = create_agent(
     llm,
-    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, probe_http, get_tls_info, dns_lookup, commands, retriever_tool],
+    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, get_tls_info, dns_lookup, probe_http, commands, retriever_tool],
     system_prompt=Recon_agent_Prompt,
 )
 
@@ -294,7 +297,8 @@ enumeration_agent = create_agent(
 
 Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in the target."
                      "If there are no vulnerabilities reported you do not need to do anything"
-                     "Use the tools provided to exploit found vulnerabilities."
+                     "Use the retriever tool to find out how to use commands you need the run with the commands tool for exploitation"
+                     "The other tools are there as a last case scenario if you've achieved nothing doing commands"
                      "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
 expl_agent = create_agent(
     llm,

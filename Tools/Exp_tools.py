@@ -346,13 +346,20 @@ def run_metasploit_exploit(
 @tool
 def basic_metasploit_tool(target_ip: str) -> None:
     """This tool allows for a basic exploitation of a vsftpd 2.3.4 backdoor using Metasploit's msfconsole in quiet mode."""
-    print("[+] Starting msfconsole (quiet mode)...")
-    # Change to 'sudo msfconsole -q' only if you really need root and know your sudo password
-    child = pexpect.spawn('msfconsole -q', timeout=60)
-    
-    # Wait for the initial Metasploit prompt
-    child.expect(r'msf6 .*?>')
-    print("[+] Metasploit console ready.")
+    try:
+        print("[+] Starting msfconsole (quiet mode)...")
+        # Change to 'sudo msfconsole -q' only if you really need root and know your sudo password
+        child = pexpect.spawn('msfconsole -q', timeout=60)
+    except:
+        print("Timeout Reached")
+
+    try:
+        # Wait for the initial Metasploit prompt
+        child.expect(r'msf6 .*?>')
+        print("[+] Metasploit console ready.")
+    except:
+        print("Timeout Reached")
+
 
     # Step 1: Search for vsftpd (as you requested)
     print("[+] Running: search vsftpd")
@@ -435,7 +442,7 @@ async def aircrack_tool(
     - "scan": Requires 'interface'. 'duration' is optional (default 10s).
     - "deauth": Requires 'interface' and 'target_bssid'. 'client_mac' is optional.
     - "crack": Requires 'pcap_file' and 'wordlist'.
-    
+
     Args:
         action (str): "enable_monitor", "scan", "deauth", or "crack".
         interface (str): Wireless interface (e.g., 'wlan0', 'wlan0mon').

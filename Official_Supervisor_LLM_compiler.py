@@ -38,8 +38,6 @@ formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 
 
-#PLAN_FILE = "plan.txt"
-#RECON_FILE = 'recon.txt'
 
 llm = ChatOllama(model='qwen3.5:397b-cloud',temperature=0).bind(format="json")
 
@@ -268,7 +266,7 @@ Recon_agent_Prompt = (
 
 recon_agent = create_agent(
     llm,
-    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, probe_http, get_tls_info, dns_lookup, commands, retriever_tool],
+    tools=[port_scanner, host_discovery, telnet_probe, ftp_probe, get_tls_info, dns_lookup, commands, retriever_tool],
     system_prompt=Recon_agent_Prompt,
 )
 
@@ -291,7 +289,7 @@ Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in t
                      "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
 expl_agent = create_agent(
     llm,
-    tools=[commands, retriever_tool,sqlmap_tool, run_hydra_attack, run_metasploit_exploit, basic_metasploit_tool, aircrack_tool]
+    tools=[commands, retriever_tool,sqlmap_tool, run_hydra_attack, run_metasploit_exploit]
     , system_prompt=Expl_Agent_Prompt
 )
 
@@ -376,8 +374,7 @@ SUPERVISOR_PROMPT = (
     "Your first step is to develop a detailed plan and use the 'plan' tool to write into a text file for the user to read your exact plan."
 )
 
-conn = sqlite3.connect(current_dir/"Supervisor_Memory"
-""/"my_agent_memory.db", check_same_thread=False)
+conn = sqlite3.connect(current_dir/"Supervisor_Memory"/"my_agent_memory.db", check_same_thread=False)
 persistent_memory = SqliteSaver(conn)
 
 mem_lst = (list_saved_threads(current_dir/'Supervisor_Memory'/'my_agent_memory.db'))
