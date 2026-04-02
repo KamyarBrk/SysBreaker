@@ -26,7 +26,7 @@ Before running any scripts, Ollama must be downloaded. You can get it from https
 Linux/macOS: ``curl -fsSL https://ollama.com/install.sh | sh``
 Windows: ``irm https://ollama.com/install.ps1 | iex``
 
-Once Ollama is installed, run: ``ollama run gpt-oss:120b-cloud`` and sign in.
+Once Ollama is installed, run: ``ollama run qwen3.5:397b-cloud`` and sign in.
 
 **Local Python Environment Setup Instructions**
 
