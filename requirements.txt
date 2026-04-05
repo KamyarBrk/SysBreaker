@@ -139,3 +139,4 @@ langgraph-checkpoint-sqlite==3.0.3
 langchain_google_genai
 telnetlib3
 dnspython
+pexpect

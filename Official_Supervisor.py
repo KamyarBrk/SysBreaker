@@ -22,14 +22,17 @@ import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 import datetime
 import logging
-
+import pexpect
+from typing import Optional
 from Tools.Recon_tools import *
 from Tools.Enum_tools import * 
 from Tools.Exp_tools import *
 from Tools.Post_exp_tools import * 
 
 current_datetime = datetime.datetime.now()
-
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.WARNING)
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -189,6 +192,8 @@ def reporter(report: str) -> str:
     Args:
         report (str): The text content to be written to the file.
     """
+    dir_path = current_dir/'tmp_report'
+    dir_path.mkdir(parents=True, exist_ok=True)
     filename = f"report_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
     with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
@@ -206,6 +211,8 @@ def planner(report: str) -> str:
     Args:
         report (str): The text content to be written to the file.
     """
+    dir_path = current_dir/'tmp_plan'
+    dir_path.mkdir(parents=True, exist_ok=True)
     filename = f"Plan_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
     with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
@@ -239,32 +246,61 @@ def cve_lookup(software: str, version: str) -> str:
 '''
 
 
+_global_bash_process: Optional[pexpect.spawn] = None
 
+def _get_active_process() -> pexpect.spawn:
+    """Returns the active bash process, creating or restarting it if necessary."""
+    global _global_bash_process
+    
+    # Check if process is None OR if it has crashed/terminated
+    if _global_bash_process is None or not _global_bash_process.isalive():
+        # Spawn a persistent bash process in the background
+        _global_bash_process = pexpect.spawn('/bin/bash', encoding='utf-8', echo=False)
+        
+        # Clear the initial bash banner/prompt
+        try:
+            # Using EOF instead of a magic string naturally triggers a timeout
+            _global_bash_process.expect(pexpect.EOF, timeout=1)
+        except pexpect.TIMEOUT:
+            pass
+            
+    return _global_bash_process
+
+def _read_screen(process: pexpect.spawn, timeout: float = 2.0) -> str:
+    """Reads whatever is currently printed on the terminal screen."""
+    try:
+        # Expecting EOF acts as a clean, intentional timeout mechanism
+        process.expect(pexpect.EOF, timeout=timeout)
+    except pexpect.TIMEOUT:
+        pass
+    except pexpect.EOF:
+        # Safely handle the case where the process dies while we're reading
+        pass
+    
+    output = process.before
+    return output.strip() if output else ""
 
 @tool
-def commands(command: str) -> str:
+def commands(command: str, timeout: float = 2.0) -> str:
     """
-    Executes a shell command on the local system and returns
-    the stdout, stderr, and exit code.
-
+    Executes a command in a persistent, interactive terminal session.
+    Can be used for normal commands or interactive tools like telnet/ssh.
+    
     Args:
-        command: The shell command to execute.
+        command: The shell command or text to type into the terminal.
+        timeout: How many seconds to wait for the output to settle.
+        
+    Returns:
+        The formatted terminal output.
     """
-
-    result = subprocess.run(
-        command,
-        shell=True,
-        capture_output=True,
-        text=True,
-    )
-    output = []
-    if result.stdout:
-        output.append(f"STDOUT:\n{result.stdout.strip()}")
-    if result.stderr:
-        output.append(f"STDERR:\n{result.stderr.strip()}")
-    output.append(f"EXIT CODE: {result.returncode}")
-    return "\n".join(output)
-
+    process = _get_active_process()
+    
+    process.sendline(command)
+    
+    # Read the screen using the configurable timeout
+    screen_output = _read_screen(process, timeout=timeout)
+    
+    return f"TERMINAL OUTPUT:\n{screen_output}"
 
 
 Recon_agent_Prompt = (
