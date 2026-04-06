@@ -72,5 +72,3 @@ def create_vector_db():
         print(f"Error setting up ChromaDB: {str(e)}")
         raise
 
-
-

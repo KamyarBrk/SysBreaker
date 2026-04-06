@@ -195,9 +195,9 @@ def reporter(report: str) -> str:
     dir_path = current_dir/'tmp_report'
     dir_path.mkdir(parents=True, exist_ok=True)
     filename = f"report_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
+    with open(current_dir/'tmp_report'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
-    return f'Success: Report written to ./tmp/{filename}'
+    return f'Success: Report written to ./tmp_report/{filename}'
 
 @tool
 def planner(report: str) -> str:
@@ -214,9 +214,9 @@ def planner(report: str) -> str:
     dir_path = current_dir/'tmp_plan'
     dir_path.mkdir(parents=True, exist_ok=True)
     filename = f"Plan_{current_datetime.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-    with open(current_dir/'tmp'/f'{filename}', 'w', encoding='utf-8') as f:
+    with open(current_dir/'tmp_plan'/f'{filename}', 'w', encoding='utf-8') as f:
         f.write(report)
-    return f'Success: Plan written to ./tmp/{filename}'
+    return f'Success: Plan written to ./tmp_plan/{filename}'
 
 '''
 @tool
@@ -341,7 +341,7 @@ Expl_Agent_Prompt = ("You have the role of exploiting found vulnerabilities in t
                      "If you succeeded in exploiting the vulnerability you should list how you did it report you were successful")
 expl_agent = create_agent(
     llm,
-    tools=[commands, retriever_tool,sqlmap_tool, run_hydra_attack, run_metasploit_exploit, basic_metasploit_tool, aircrack_tool]
+    tools=[commands, retriever_tool,metasploit_tool]#,sqlmap_tool, run_hydra_attack, run_metasploit_exploit, basic_metasploit_tool, aircrack_tool]
     , system_prompt=Expl_Agent_Prompt
 )
 

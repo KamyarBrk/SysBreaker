@@ -18,63 +18,68 @@ def nvd_lookup(service_and_version: str) -> str:
     Args:
         service_and_version: Service and version to search for.
     """
-    parts = service_and_version.strip().split(" ", 1)
-    service = parts[0]
-    version = parts[1] if len(parts) > 1 else ""
+    try:
 
-    keyword = f"{service} {version}".strip()
+        parts = service_and_version.strip().split(" ", 1)
+        service = parts[0]
+        version = parts[1] if len(parts) > 1 else ""
 
-    params = {
-        "keywordSearch": keyword,
-        "resultsPerPage": 10,
-        "startIndex": 0,
-    }
+        keyword = f"{service} {version}".strip()
 
-    response = requests.get(NVD_API, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()
+        params = {
+            "keywordSearch": keyword,
+            "resultsPerPage": 10,
+            "startIndex": 0,
+        }
 
-    total = data.get("totalResults", 0)
-    vulns = data.get("vulnerabilities", [])
+        response = requests.get(NVD_API, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
 
-    if not vulns:
-        return f"No CVEs found for '{keyword}'."
+        total = data.get("totalResults", 0)
+        vulns = data.get("vulnerabilities", [])
 
-    results = [f"CVEs for '{keyword}' ({total} total, showing top {len(vulns)}):"]
-    results.append("=" * 60)
+        if not vulns:
+            return f"No CVEs found for '{keyword}'."
 
-    for item in vulns:
-        cve = item.get("cve", {})
-        cve_id = cve.get("id", "N/A")
+        results = [f"CVEs for '{keyword}' ({total} total, showing top {len(vulns)}):"]
+        results.append("=" * 60)
 
-        # Description
-        descs = cve.get("descriptions", [])
-        description = next(
-            (d["value"] for d in descs if d.get("lang") == "en"),
-            "No description available."
-        )
+        for item in vulns:
+            cve = item.get("cve", {})
+            cve_id = cve.get("id", "N/A")
 
-        # CVSS score
-        score = "N/A"
-        severity = "N/A"
-        metrics = cve.get("metrics", {})
-        for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-            if key in metrics and metrics[key]:
-                cvss_data = metrics[key][0].get("cvssData", {})
-                score = cvss_data.get("baseScore", "N/A")
-                severity = cvss_data.get("baseSeverity", metrics[key][0].get("baseSeverity", "N/A"))
-                break
+            # Description
+            descs = cve.get("descriptions", [])
+            description = next(
+                (d["value"] for d in descs if d.get("lang") == "en"),
+                "No description available."
+            )
 
-        # Published date
-        published = cve.get("published", "N/A")[:10]
+            # CVSS score
+            score = "N/A"
+            severity = "N/A"
+            metrics = cve.get("metrics", {})
+            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                if key in metrics and metrics[key]:
+                    cvss_data = metrics[key][0].get("cvssData", {})
+                    score = cvss_data.get("baseScore", "N/A")
+                    severity = cvss_data.get("baseSeverity", metrics[key][0].get("baseSeverity", "N/A"))
+                    break
 
-        # References
-        refs = cve.get("references", [])
-        ref_urls = [r["url"] for r in refs[:2]]
+            # Published date
+            published = cve.get("published", "N/A")[:10]
 
-        results.append(f"\n[{cve_id}]  Score: {score} ({severity})  Published: {published}")
-        results.append(f"  {description[:200]}{'...' if len(description) > 200 else ''}")
-        if ref_urls:
-            results.append(f"  Refs: {' | '.join(ref_urls)}")
+            # References
+            refs = cve.get("references", [])
+            ref_urls = [r["url"] for r in refs[:2]]
 
-    return "\n".join(results)
+            results.append(f"\n[{cve_id}]  Score: {score} ({severity})  Published: {published}")
+            results.append(f"  {description[:200]}{'...' if len(description) > 200 else ''}")
+            if ref_urls:
+                results.append(f"  Refs: {' | '.join(ref_urls)}")
+
+        return "\n".join(results)
+    
+    except Exception as e:
+        return(f'Error: {e}')

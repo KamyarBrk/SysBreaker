@@ -17,18 +17,20 @@ def host_discovery(cidr_or_host: str) -> str:
     Args:
         cidr_or_host: IP address, hostname, or CIDR range (e.g., "192.168.1.0/24").
     """
-    nm = nmap.PortScanner()
-    nm.scan(hosts=cidr_or_host, arguments="-sn -T4 --open")
-    live = []
-    for host in nm.all_hosts():
-        state = nm[host].state()
-        hostname = nm[host].hostname() or "N/A"
-        if state == "up":
-            live.append(f"  {host:18s} ({hostname})")
-    if live:
-        return f"Live hosts on {cidr_or_host}:\n" + "\n".join(live)
-    return f"No live hosts found on {cidr_or_host}."
-
+    try:
+        nm = nmap.PortScanner()
+        nm.scan(hosts=cidr_or_host, arguments="-sn -T4 --open")
+        live = []
+        for host in nm.all_hosts():
+            state = nm[host].state()
+            hostname = nm[host].hostname() or "N/A"
+            if state == "up":
+                live.append(f"  {host:18s} ({hostname})")
+        if live:
+            return f"Live hosts on {cidr_or_host}:\n" + "\n".join(live)
+        return f"No live hosts found on {cidr_or_host}."
+    except Exception as e:
+        return(f'Error: {e}')
 
 
 @tool
@@ -39,13 +41,16 @@ def telnet_probe(target: str) -> str:
     Args:
         target: IP address or hostname.
     """
-    tn = telnetlib3.Telnet(target, 23, timeout=6)
-    banner = tn.read_until(b"login:", timeout=4).decode(errors="replace").strip()
-    tn.close()
-    if banner:
-        return f"TELNET OPEN — Banner:\n{banner}"
-    return "Telnet port open (no banner received)"
+    try:
 
+        tn = telnetlib3.Telnet(target, 23, timeout=6)
+        banner = tn.read_until(b"login:", timeout=4).decode(errors="replace").strip()
+        tn.close()
+        if banner:
+            return f"TELNET OPEN — Banner:\n{banner}"
+        return "Telnet port open (no banner received)"
+    except Exception as e:
+        return(f'Error: {e}')
 
 
 @tool
@@ -97,8 +102,11 @@ def port_scanner(ip: str, arguments: str = "-sV") -> str:
         arguments: Nmap arguments/flags to customize the scan (e.g. '-sV', '-p 80,443', '-A').
                    Defaults to '-sV' for version detection.
     """
-    nm = nmap.PortScanner()
-    return nm.scan(ip, arguments=arguments)
+    try:
+        nm = nmap.PortScanner()
+        return nm.scan(ip, arguments=arguments)
+    except Exception as e:
+        return(f'Error: {e}')
 
 @tool
 def probe_http(url: str) -> str:
@@ -132,6 +140,7 @@ def dns_lookup(domain: str) -> str:
     Args:
         domain: Domain for the DNS lookup
     """
+    
     record_types = ["A", "MX", "TXT", "CNAME", "NS"]
     results = {}
     for rtype in record_types:
