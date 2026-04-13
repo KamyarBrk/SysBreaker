@@ -1,13 +1,15 @@
 # Ignore everything inside the directories:
 .venv
-.env
+Supervisor/.env
 Enumeration_module/enumeration_memory.json
 Exploitation_module/exploitation_memory.json
 Post_Exploitation_module/post_exploitation_memory.json
 Recon_module/recon_memory.json
 practice_stuff/
 path to/your/persisted/vectorstore
-vectors/*
+Supervisor/Supervisor_Memory/*
+tmp/Plans/*
+tmp/Reports/*
 
 # But do not ignore the .gitkeep files:
 !vectors/vectors.gitkeep
