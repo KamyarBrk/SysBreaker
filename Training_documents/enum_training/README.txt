@@ -1,1 +1,0 @@
-All these pdf files were made from official documentations 
