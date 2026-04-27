@@ -16,7 +16,7 @@
 param(
     [string]$VenvDir = ".venv",
     [string]$PythonExe = "python",
-    [string]$RequirementsFile = "Setup_Scripts/requirements.txt",
+    [string]$RequirementsFile = "$PSScriptRoot\requirements.txt",
     [Version]$MinPythonVersion = "3.10.0",
     [Version]$MaxPythonVersion = "3.12.8"
 )
