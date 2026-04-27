@@ -28,7 +28,7 @@ source $VENV_DIR/bin/activate
 echo "Upgrading pip..."
 pip install --upgrade pip
 
-if [ -f "requirements.txt" ]; then
+if [ -f "Setup_Scripts/requirements.txt" ]; then
     echo "Installing dependencies..."
     pip install -r requirements.txt
 else
