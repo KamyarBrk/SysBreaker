@@ -32,7 +32,7 @@ Once Ollama is installed, run: ``ollama run qwen3.5:397b-cloud`` and sign in.
 
 1. Clone the repo locally in VS code
 2. Open the folder in VS Code
-3. Run `.\setup.ps1` (Windows) or `chmod +x setup.sh` & `./setup.sh` (macOS/Linux) in the terminal. Note you need Python 3.11 or 3.12. 
+3. Run `setup_scripts\setup.ps1` (Windows) or `chmod +x setup_scripts/setup.sh` & `setup_scripts/setup.sh` (macOS/Linux) in the terminal. Note you need Python 3.11 or 3.12. 
 
 Make sure you are in the virtual environment before attempting to run any modules!
 
