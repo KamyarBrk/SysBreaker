@@ -77,7 +77,7 @@ if ($venvPath) {
     Write-Host "Virtual environment directory '$VenvDir' already exists. Skipping creation."
 } else {
     Write-Host "Creating virtual environment in '$VenvDir'..."
-    $createResult = & $foundPython -m venv $VenvDir 2>&1
+    $createResult = & $foundPython -m venv $VenvDir --upgrade-deps 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host $createResult
         Write-ErrorAndExit "Failed to create virtual environment."
