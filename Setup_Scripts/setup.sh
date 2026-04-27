@@ -30,7 +30,7 @@ pip install --upgrade pip
 
 if [ -f "Setup_Scripts/requirements.txt" ]; then
     echo "Installing dependencies..."
-    pip install -r requirements.txt
+    pip install -r Setup_Scripts/requirements.txt
 else
     echo "requirements.txt not found!"
     exit 1
