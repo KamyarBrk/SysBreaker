@@ -141,3 +141,4 @@ Write-Host ""
 Write-Host "Done. Windows users should now run .venv\Scripts\activate.ps1 in the terminal to activate the virtual environment." -ForegroundColor Yellow
 Write-Host "You should then see '(.venv)' in green." -ForegroundColor Yellow
 Write-Host ""
+. $activatePath
