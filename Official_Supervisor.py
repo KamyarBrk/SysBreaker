@@ -7,7 +7,6 @@ from langchain.tools import tool
 from langchain.agents import create_agent
 from nmap import nmap
 from langchain_ollama.embeddings import OllamaEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langsmith import traceable
 import telnetlib3
 import subprocess
@@ -44,7 +43,7 @@ formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 
 
-llm = ChatOllama(model='qwen3.5:397b-cloud', base_url='http://127.0.0.1:11434' ,temperature=0.3)
+llm = ChatOllama(model='qwen3.5:397b-cloud', base_url='http://ollama-container:11434' ,temperature=0.3)
 
 
 try:

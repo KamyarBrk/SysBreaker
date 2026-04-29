@@ -39,4 +39,12 @@ Make sure you are in the virtual environment before attempting to run any module
 <img width="813" height="429" alt="image" src="https://github.com/user-attachments/assets/fce8b7d1-1cb2-4ec6-9075-ff710ff51dc5" />
 <img width="615" height="230" alt="image" src="https://github.com/user-attachments/assets/840a92fe-398d-43db-8a04-42940880a757" />
 
+# Docker Setup
+**Setup with the new docker compose**
 
+Using docker compose and the new ``docker-compose.yml`` file we created the framework can run from inside of a docker container
+
+**Instructions**
+1. ``docker compose up -d``
+2. ``docker exec -it <ollama container> ollama run qwen3.5:397b-cloud``
+3. Navigate to ``localhost:8501``

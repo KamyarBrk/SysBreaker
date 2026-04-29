@@ -1,0 +1,11 @@
+services:
+  ollama-container:
+    image: ollama/ollama
+    volumes:
+      - ./data/ollama:/root/.ollama
+    ports:
+      - 11434:11434
+  sysbreker:
+    image: pdean6/sysbreaker
+    ports:
+      - 8501:8501

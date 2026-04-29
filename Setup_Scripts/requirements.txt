@@ -46,10 +46,6 @@ geographiclib==2.1
 geopy==2.4.1
 gitdb==4.0.12
 GitPython==3.1.49
-google-ai-generativelanguage==0.11.0
-google-api-core==2.30.3
-google-auth==2.43.0
-google-genai==1.68.0
 googleapis-common-protos==1.72.0
 greenlet==3.2.4
 grpcio==1.76.0
@@ -81,14 +77,11 @@ jsonschema-specifications==2025.9.1
 kiwisolver==1.5.0
 kubernetes==34.1.0
 langchain==1.0.5
-langchain-anthropic==1.4.0
 langchain-chroma==0.2.6
 langchain-classic==1.0.0
 langchain-community==0.4.1
 langchain-core==1.0.4
-langchain-google-genai==3.0.3
 langchain-ollama==1.0.0
-langchain-openai==1.1.11
 langchain-text-splitters==1.0.0
 langgraph==1.0.3
 langgraph-checkpoint==3.0.0
