@@ -1,24 +1,4 @@
 from langchain.tools import tool
-import subprocess
-from pathlib import Path
-import shlex
-from pathlib import Path
-from typing import Dict, Optional
-import json
-import subprocess
-from pymetasploit3.msfrpc import MsfRpcClient
-import time
-from typing import Dict, Any, Optional
-from pymetasploit3.msfrpc import MsfRpcClient
-import pexpect
-import time
-import sys
-import asyncio
-import pyrcrack
-from pyrcrack import AirmonNg, AirodumpNg, AireplayNg, AircrackNg
-
-
-
 import pexpect
 import re
 

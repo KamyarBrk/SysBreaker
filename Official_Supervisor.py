@@ -39,11 +39,11 @@ formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M:%S")
 
 
 
-llm = ChatOllama(model='qwen3.5:397b-cloud', temperature=0.3)
+llm = ChatOllama(model='qwen3.5:397b-cloud', base_url='http://127.0.0.1:11434' ,temperature=0.3)
 
 
 try:
-    current_dir = Path(__file__).resolve().parent.parent
+    current_dir = Path(__file__).resolve().parent
 except NameError:
     current_dir = Path.cwd().parent
 
