@@ -1,4 +1,6 @@
 import os
+from time import sleep
+
 from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langchain.tools import tool
@@ -17,12 +19,15 @@ import ssl
 import socket
 from pathlib import Path
 from langchain_chroma import Chroma
+from sympy.codegen.ast import continue_
+
 from vector.VectorDB_creator import create_vector_db
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 import datetime
 import logging
 import pexpect
+import streamlit as st
 from typing import Optional
 from Tools.Recon_tools import *
 from Tools.Enum_tools import * 
@@ -50,22 +55,27 @@ except NameError:
 
 directory_path = current_dir/"vector"
 
-# Check if the path exists and is a directory
-try:
-    if directory_path.is_dir():
-        print("The VectorDB directory exists. Would you like to create a new vector database? This will overwrite the existing one. (yes/no)")
-        user_input = input("Enter->: ").strip().lower()
-        if user_input in ['yes', 'y']:  
-            create_vector_db()       
+st.title(f"Welcome to the Multi-Agentic AI Pentesting Framework.")
 
-    else:
-        print("The VectorDB directory does not exist. A new vector database will be created.")
+db_creation_selection = st.button('Generate new VectorDB')
+if db_creation_selection:
         create_vector_db()
-except Exception as e:
-    print(f"An error occurred while checking the VectorDB directory/Creation: {e}")
 
+# Check if the path exists and is a directory
+#try:
+#    if directory_path.is_dir():
+#        print("The VectorDB directory exists. Would you like to create a new vector database? This will overwrite the existing one. (yes/no)")
+#        user_input = input("Enter->: ").strip().lower()
+#        if user_input in ['yes', 'y']:
+#            create_vector_db()
+#
+#    else:
+#        print("The VectorDB directory does not exist. A new vector database will be created.")
+#        create_vector_db()
+#except Exception as e:
+#    print(f"An error occurred while checking the VectorDB directory/Creation: {e}")
 embeddings = OllamaEmbeddings(
-    model="nomic-embed-text" 
+    model="nomic-embed-text"
 )
 
 
@@ -103,7 +113,7 @@ def list_saved_threads(db_path: str) -> list:
             if not threads:
                 print("The database is empty. No thread_ids found.")
                 return
-                
+
             print("\n--- Available Saved Sessions ---")
             thread_id_lst = []
             for i, (thread_id,) in enumerate(threads, 1):
@@ -401,25 +411,47 @@ persistent_memory = SqliteSaver(conn)
 mem_lst = (list_saved_threads(current_dir/'Supervisor'/'Supervisor_Memory'/'my_agent_memory.db'))
 
 
-try:
-    session_delete_choice = input("Would you like to delete any previous memory threads? (yes/no): ").strip().lower()
+mem_sessions_deletion = st.selectbox(f"Select id of previous session to delete: ", mem_lst)
+if st.button("Delete"):
+    clear_thread_memory(current_dir / 'Supervisor' / 'Supervisor_Memory' / 'my_agent_memory.db',
+                        mem_sessions_deletion)
+    st.success(f"Session {mem_sessions_deletion} has been deleted")
+    sleep(2)
+    st.rerun()
 
-    if session_delete_choice in ['yes', 'y']:
-        delete_thread_id = input("Enter the thread ID to delete, enter a list of Thread IDs to remove multiple of them: ").strip()
-        my_list = [int(num) for num in delete_thread_id.split()]
-        for thread_id in my_list:
-            clear_thread_memory(current_dir/'Supervisor'/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
-except Exception as e:
-    print(f"An error occurred while trying to delete memory threads: {e}")
 
+
+
+#try:
+    #session_delete_choice = input("Would you like to delete any previous memory threads? (yes/no): ").strip().lower()
+
+    #if session_delete_choice in ['yes', 'y']:
+        #delete_thread_id = input("Enter the thread ID to delete, enter a list of Thread IDs to remove multiple of them: ").strip()
+        #my_list = [int(num) for num in delete_thread_id.split()]
+        #for thread_id in my_list:
+            #clear_thread_memory(current_dir/'Supervisor'/'Supervisor_Memory'/'my_agent_memory.db', f"{mem_lst[thread_id-1]}")
+#except Exception as e:
+    #print(f"An error occurred while trying to delete memory threads: {e}")
+
+if 'config' not in st.session_state:
+    st.session_state.config = None
 
 mem_lst = (list_saved_threads(current_dir/'Supervisor'/'Supervisor_Memory'/'my_agent_memory.db'))
-session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
 
-if session_choice == 0:
-    config = {"configurable": {"thread_id": f"pentest_session: {formatted_datetime}", }, "recursion_limit": 100}
-else:
-    config = {"configurable": {"thread_id": mem_lst[session_choice-1]}, "recursion_limit": 100}
+mem_session_selection = st.selectbox("Select memory session or a new session:", mem_lst)
+
+if st.button('Select'):
+    st.session_state.config = {"configurable": {"thread_id": mem_lst.index(mem_sessions_deletion)}, "recursion_limit": 100}
+    st.success(f"Session {mem_session_selection} loaded")
+if st.button('New'):
+        st.session_state.config = {"configurable": {"thread_id": f"pentest_session: {formatted_datetime}", }, "recursion_limit": 100}
+        st.success("Pentest Session Started")
+#session_choice = int(input("Enter the number associated with the thread ID above to load memory for or type 0 to start a new session: "))
+
+#if session_choice == 0:
+    #config = {"configurable": {"thread_id": f"pentest_session: {formatted_datetime}", }, "recursion_limit": 100}
+#else:
+    #config = {"configurable": {"thread_id": mem_lst[session_choice-1]}, "recursion_limit": 100}
 
 supervisor_agent = create_agent(
     llm,
@@ -430,15 +462,39 @@ supervisor_agent = create_agent(
 
 
 exit_conditions = ["end","quit","exit","stop","done","finished"]
-print(f"Welcome to the Multi-Agentic AI Pentesting Framework. Type your commands to start the pentesting process. Type any of the following to finish: {exit_conditions}")
-query = input("Enter->: ")
 
-while query not in exit_conditions:
+#New streamlit configuration
 
+
+st.header(f"Type your commands to start the pentesting process.")
+#st.text(f"Type any of the following to finish: {exit_conditions}")
+
+with st.form("user_query"):
+    query = st.text_area("Enter your request:")
+    submitted = st.form_submit_button("Submit")
+if submitted:
+    if st.session_state.config is None:
+        st.error("Please select a session first")
     for step in supervisor_agent.stream(
-        {"messages": [{"role": "user", "content": query}]},config=config):
+        {"messages": [{"role": "user", "content": query}]},config=st.session_state.config):
         for update in step.values():
             for message in update.get("messages", []):
                 message.pretty_print()
+                if hasattr(message, "content"):
+                    st.info(f'{message.type}: {message.content}')
+                else:
+                    st.info(str(message))
 
-    query = input("Enter->: ")
+
+#print(f"Welcome to the Multi-Agentic AI Pentesting Framework. Type your commands to start the pentesting process. Type any of the following to finish: {exit_conditions}")
+#query = input("Enter->: ")
+
+#while query not in exit_conditions:
+
+    #for step in supervisor_agent.stream(
+        #{"messages": [{"role": "user", "content": query}]},config=config):
+        #for update in step.values():
+            #for message in update.get("messages", []):
+                #message.pretty_print()
+
+    #query = input("Enter->: ")
