@@ -1,5 +1,6 @@
 # Ignore everything inside the directories:
 .venv
+.env
 Supervisor/.env
 Enumeration_module/enumeration_memory.json
 Exploitation_module/exploitation_memory.json
